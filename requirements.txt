@@ -1,0 +1,40 @@
+# --- Web framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-multipart==0.0.20
+
+# --- Database (PostgreSQL + PostGIS) ---
+SQLAlchemy==2.0.36
+GeoAlchemy2==0.16.0
+psycopg[binary]==3.2.3
+
+# --- GIS ---
+rasterio==1.4.3
+geopandas==1.0.1
+shapely==2.0.6
+pyproj==3.7.0
+fiona==1.10.1
+
+# --- ML: PINNED to match the versions the supplied preprocessor.pkl /
+# xgboost_manganese_model.pkl / moil_production_pipeline.pkl were actually
+# trained with (verified by inspection - see README "Version compatibility").
+# Do NOT bump these without re-verifying artifact load + a predict() smoke
+# test; scikit-learn changed internal pickle-format internals between
+# 1.6.x and 1.7+ (ColumnTransformer's _RemainderColsList).
+scikit-learn==1.6.1
+xgboost==2.1.4
+joblib==1.4.2
+pandas==2.2.3
+numpy==1.26.4
+
+# --- HTTP client (external weather/soil API) ---
+httpx==0.28.1
+
+# --- Config ---
+python-dotenv==1.0.1
+
+# --- Testing ---
+pytest==8.3.4
+pytest-asyncio==0.25.0

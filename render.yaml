@@ -1,0 +1,44 @@
+# Render deployment blueprint.
+#
+# IMPORTANT (Render + PostGIS): Render's managed PostgreSQL supports the
+# `postgis` extension on its standard plans (verify current availability at
+# deploy time in the Render dashboard - offerings change). If it is not
+# available on your plan/region, use an external managed Postgres with
+# PostGIS (e.g. Supabase, Neon, Aiven, or a self-hosted
+# postgis/postgis Docker image) and point DATABASE_URL at it instead of the
+# `fromDatabase` reference below - the app only needs a standard
+# postgresql+psycopg:// connection string with PostGIS enabled, it does not
+# care which provider hosts it.
+databases:
+  - name: manganese-gis-db
+    plan: starter
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: manganese-mining-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: manganese-gis-db
+          property: connectionString
+      - key: CORS_ORIGINS
+        value: https://your-frontend.example.com
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false # set manually in the Render dashboard - never commit it
+      - key: ADMIN_SESSION_SECRET
+        generateValue: true
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "200"
+      - key: UPLOAD_TTL_HOURS
+        value: "24"
