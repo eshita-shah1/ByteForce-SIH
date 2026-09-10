@@ -36,3 +36,20 @@ def require_admin(
             headers={"WWW-Authenticate": "Basic"},
         )
     return credentials.username
+
+
+def verify_login_credentials(email: str, password: str, settings: Settings) -> bool:
+    """Same admin credential source as require_admin (RULE 16: no separate
+    end-user accounts), but for the JSON login endpoint the frontend expects
+    (POST /api/auth/login), which identifies the account by email rather
+    than HTTP Basic's username. Compared case-insensitively since the
+    frontend lower-cases the email before sending it.
+    """
+    if not settings.admin_password:
+        return False
+
+    valid_username = secrets.compare_digest(
+        email.strip().lower(), settings.admin_username.strip().lower()
+    )
+    valid_password = secrets.compare_digest(password, settings.admin_password)
+    return valid_username and valid_password

@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, health, prospectivity, shortfall, study_area, upload
+from app.api import admin, auth, health, logs, prospectivity, shortfall, study_area, upload
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import RequestContextMiddleware, configure_logging
@@ -41,6 +41,8 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(health.router)
+    app.include_router(auth.router)
+    app.include_router(logs.router)
     app.include_router(study_area.router)
     app.include_router(prospectivity.router)
     app.include_router(upload.router)

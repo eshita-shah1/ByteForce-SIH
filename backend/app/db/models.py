@@ -118,3 +118,21 @@ class UploadFile(Base):
     detected_crs = Column(String, nullable=True)
     metadata_json = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=dt.datetime.utcnow)
+
+
+# --- model_run_logs (ORM) -----------------------------------------------------
+# Audit trail of Model 1 / Model 2 predictions, backing GET /api/logs (the
+# frontend's "Model Execution Logs" view). Written by the prospectivity/
+# shortfall routers right after a successful prediction.
+
+
+class ModelRunLog(Base):
+    __tablename__ = "model_run_logs"
+
+    id = Column(String, primary_key=True)  # uuid4 hex
+    model_type = Column(String, nullable=False)  # "Prospectivity" | "Shortfall"
+    title = Column(String, nullable=False)
+    target_site = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="Completed")  # Completed|Pending|Flagged
+    metric_highlight = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=dt.datetime.utcnow, nullable=False, index=True)
