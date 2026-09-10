@@ -1,10 +1,32 @@
-__pycache__/
+# --- backend (Python) ---
+backend/**/__pycache__/
 *.pyc
 .venv/
 venv/
-.env
-uploads/*
-!uploads/.gitkeep
+backend/uploads/*
+!backend/uploads/.gitkeep
 .pytest_cache/
 *.egg-info/
+
+# --- frontend (Node) ---
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.local
+
+# --- env files ---
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# --- editor / OS ---
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

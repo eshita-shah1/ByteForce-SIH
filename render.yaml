@@ -18,7 +18,8 @@ services:
   - type: web
     name: manganese-mining-backend
     env: docker
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
     plan: starter
     healthCheckPath: /api/health
     envVars:

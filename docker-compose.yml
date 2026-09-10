@@ -16,7 +16,7 @@ services:
       retries: 10
 
   backend:
-    build: .
+    build: ./backend
     depends_on:
       db:
         condition: service_healthy
@@ -28,7 +28,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./uploads:/app/uploads
+      - ./backend/uploads:/app/uploads
 
 volumes:
   pgdata:
