@@ -23,6 +23,68 @@ export type ProspectivityApiResult =
   | { ok: true; data: ProspectivityApiResponse }
   | { ok: false; message: string };
 
+/** Mirrors backend app/schemas/upload.py's UploadCreateResponse exactly. */
+export interface UploadCreateApiResponse {
+  success: boolean;
+  upload_id: string;
+  status: string; // "processing" | "validated" | "failed"
+}
+
+/** Mirrors backend app/schemas/upload.py's FileValidationResult exactly. */
+export interface UploadFileValidationResult {
+  filename: string;
+  file_type: string;
+  readable: boolean;
+  detected_crs: string | null;
+  bounds: number[] | null;
+  errors: string[];
+  warnings: string[];
+}
+
+/** Mirrors backend app/schemas/upload.py's FeatureCheck exactly. */
+export interface UploadFeatureCheck {
+  feature: string;
+  found: boolean;
+  source_file: string | null;
+  source_layer: string | null;
+  method: string | null;
+  note: string | null;
+}
+
+/** Mirrors backend app/schemas/upload.py's DatasetValidationResult exactly. */
+export interface UploadDatasetValidationResult {
+  upload_id: string;
+  status: string;
+  files: UploadFileValidationResult[];
+  feature_checks: UploadFeatureCheck[];
+  available_features: string[];
+  missing_features: string[];
+  covers_selected_point: boolean | null;
+  ready_for_prediction: boolean;
+  error_message: string | null;
+}
+
+/** Mirrors backend app/schemas/upload.py's UploadStatusResponse exactly. */
+export interface UploadStatusApiResponse {
+  success: boolean;
+  upload_id: string;
+  status: string;
+  detected_crs: string | null;
+  bounds: number[] | null;
+  available_features: string[];
+  missing_features: string[];
+  files: string[];
+  validation: UploadDatasetValidationResult | null;
+}
+
+export type UploadCreateResult =
+  | { ok: true; data: UploadCreateApiResponse }
+  | { ok: false; message: string };
+
+export type UploadStatusResult =
+  | { ok: true; data: UploadStatusApiResponse }
+  | { ok: false; message: string };
+
 export const api = {
   /**
    * User authentication endpoint (POST /api/auth/login). Distinguishes
@@ -195,6 +257,87 @@ export const api = {
       });
     } catch (err) {
       console.error('Backend prospectivity endpoint unreachable:', err);
+      return { ok: false, message: 'Unable to reach the server. Please try again.' };
+    }
+
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { ok: false, message: body?.message || `Server error (${res.status}). Please try again.` };
+    }
+    return { ok: true, data: body as ProspectivityApiResponse };
+  },
+
+  /**
+   * Uploads every given file as ONE batch (POST /api/upload) - the backend
+   * requires all files for an upload session in a single multipart request
+   * (files: list[UploadFile]), so this must not be called once per file.
+   * Separate from uploadDocument() above (which DocumentsView still uses
+   * for its single-file-with-a-real-category flow) - that function is
+   * untouched.
+   */
+  async uploadGISDataset(files: File[], category?: string): Promise<UploadCreateResult> {
+    let res: Response;
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append('files', file));
+      if (category) formData.append('category', category);
+
+      res = await fetch(`${API_BASE_URL}/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+    } catch (err) {
+      console.error('Backend upload endpoint unreachable:', err);
+      return { ok: false, message: 'Unable to reach the server. Please try again.' };
+    }
+
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { ok: false, message: body?.message || `Server error (${res.status}). Please try again.` };
+    }
+    return { ok: true, data: body as UploadCreateApiResponse };
+  },
+
+  /**
+   * Reads back an upload session's real validation state (GET
+   * /api/upload/{upload_id}) - available/missing Model 1 features and
+   * whether the dataset is actually ready_for_prediction, straight from
+   * the backend. Never guessed client-side.
+   */
+  async getUploadStatus(uploadId: string): Promise<UploadStatusResult> {
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE_URL}/upload/${encodeURIComponent(uploadId)}`);
+    } catch (err) {
+      console.error('Backend upload-status endpoint unreachable:', err);
+      return { ok: false, message: 'Unable to reach the server. Please try again.' };
+    }
+
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { ok: false, message: body?.message || `Server error (${res.status}). Please try again.` };
+    }
+    return { ok: true, data: body as UploadStatusApiResponse };
+  },
+
+  /**
+   * Run Prospectivity Model against a previously uploaded dataset (POST
+   * /api/upload/{upload_id}/prospectivity). Same ProspectivityResponse
+   * shape as runProspectivityModel() above (data_source is
+   * "uploaded_dataset" instead of "existing_study_area", and
+   * matched_cell_id/match_distance_m come back null - there's no grid-cell
+   * concept for a point sampled directly from uploaded rasters/vectors).
+   */
+  async runProspectivityModelFromUpload(uploadId: string, payload: { latitude: number; longitude: number }): Promise<ProspectivityApiResult> {
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE_URL}/upload/${encodeURIComponent(uploadId)}/prospectivity`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.error('Backend upload-prospectivity endpoint unreachable:', err);
       return { ok: false, message: 'Unable to reach the server. Please try again.' };
     }
 

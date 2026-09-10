@@ -1,25 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  ChevronUp, 
-  ChevronDown, 
-  Play, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Upload, 
-  X, 
-  Sparkles,
+import {
+  ChevronUp,
+  ChevronDown,
+  Play,
+  CheckCircle2,
+  AlertTriangle,
+  Upload,
+  X,
   ArrowRight,
   FileDown,
   RotateCcw,
   Compass,
-  MapPin
+  MapPin,
 } from 'lucide-react';
 import { StudyAreaMap } from '../components/prospectivity/StudyAreaMap';
 import { BHARVELI_CENTER, isInsideStudyArea, formatCoordinate } from '../utils/geoUtils';
 import { useAuth } from '../context/AuthContext';
 import { AnimatedNumber } from '../components/core/AnimatedNumber';
-import { api, ProspectivityApiResponse } from '../services/api';
+import { api, ProspectivityApiResponse, UploadStatusApiResponse } from '../services/api';
 
 const PT = {
   en: {
@@ -53,6 +52,19 @@ const PT = {
     dataSourceLabel: 'DATA SOURCE',
     featuresUsedLabel: 'MODEL FEATURES USED',
     notAvailable: 'N/A',
+    uploadAndValidate: 'Upload & Validate Layers',
+    uploading: 'Uploading…',
+    checkingValidation: 'Checking validation…',
+    selectedNotUploaded: 'Selected — not yet uploaded',
+    uploadedLabel: 'Uploaded',
+    unreadableLabel: 'Unreadable',
+    readyBanner: 'All required Model 1 features are available in your uploaded layers.',
+    notReadyBanner: 'Your uploaded layers are missing required features for this prediction.',
+    missingFeaturesHeader: 'Missing required features',
+    availableFeaturesOf: 'available features found',
+    predictLocationTitle: 'Prediction Location',
+    predictFromUpload: 'Run prospectivity model on uploaded data',
+    predicting: 'Running model…',
   },
   hi: {
     title: 'मैंगनीज संभावना विश्लेषक',
@@ -85,6 +97,19 @@ const PT = {
     dataSourceLabel: 'डेटा स्रोत',
     featuresUsedLabel: 'उपयोग की गई मॉडल विशेषताएं',
     notAvailable: 'उपलब्ध नहीं',
+    uploadAndValidate: 'अपलोड करें और लेयर सत्यापित करें',
+    uploading: 'अपलोड हो रहा है…',
+    checkingValidation: 'सत्यापन जांचा जा रहा है…',
+    selectedNotUploaded: 'चयनित — अभी तक अपलोड नहीं हुआ',
+    uploadedLabel: 'अपलोड हो गया',
+    unreadableLabel: 'अपठनीय',
+    readyBanner: 'आपकी अपलोड की गई लेयर्स में सभी आवश्यक मॉडल 1 विशेषताएं उपलब्ध हैं।',
+    notReadyBanner: 'इस पूर्वानुमान के लिए आपकी अपलोड की गई लेयर्स में आवश्यक विशेषताओं की कमी है।',
+    missingFeaturesHeader: 'आवश्यक विशेषताएं गायब हैं',
+    availableFeaturesOf: 'उपलब्ध विशेषताएं मिलीं',
+    predictLocationTitle: 'पूर्वानुमान स्थान',
+    predictFromUpload: 'अपलोड किए गए डेटा पर संभावना मॉडल चलाएं',
+    predicting: 'मॉडल चल रहा है…',
   },
 } as const;
 
@@ -97,47 +122,20 @@ interface GISSlot {
   label: string;
   category: string;
   accept: string;
-  file: {
-    name: string;
-    size: string;
-  } | null;
-  uploadStatus: 'idle' | 'uploading' | 'completed';
+  // The real browser File object, or null until the user picks one. There
+  // is no "fake uploaded" state - a file only counts as uploaded once the
+  // backend (POST /api/upload) has actually confirmed it.
+  file: File | null;
 }
 
 const INITIAL_GIS_SLOTS: GISSlot[] = [
-  {
-    format: 'tif',
-    label: 'GeoTIFF (.tif)',
-    category: 'Elevations & Gravimetrics',
-    accept: '.tif,.tiff',
-    file: { name: 'surface_elevation_v2.tif', size: '42.4 MB' },
-    uploadStatus: 'completed',
-  },
-  {
-    format: 'shp',
-    label: 'Shapefile (.shp)',
-    category: 'Structural Fault Outlines',
-    accept: '.shp,.zip',
-    file: { name: 'shatter_fault_lines.shp', size: '12.1 MB' },
-    uploadStatus: 'completed',
-  },
-  {
-    format: 'csv',
-    label: 'CSV (.csv)',
-    category: 'Legacy Core Assay Logs',
-    accept: '.csv',
-    file: { name: 'drill_assays_1994.csv', size: '8.3 MB' },
-    uploadStatus: 'uploading',
-  },
-  {
-    format: 'geojson',
-    label: 'GeoJSON (.geojson)',
-    category: 'Tenement Boundary Block',
-    accept: '.geojson,.json',
-    file: null,
-    uploadStatus: 'idle',
-  },
+  { format: 'tif', label: 'GeoTIFF (.tif)', category: 'Elevations & Gravimetrics', accept: '.tif,.tiff', file: null },
+  { format: 'shp', label: 'Shapefile (.shp)', category: 'Structural Fault Outlines', accept: '.shp,.zip', file: null },
+  { format: 'csv', label: 'CSV (.csv)', category: 'Legacy Core Assay Logs', accept: '.csv', file: null },
+  { format: 'geojson', label: 'GeoJSON (.geojson)', category: 'Tenement Boundary Block', accept: '.geojson,.json', file: null },
 ];
+
+const formatFileSize = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
 export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBreadcrumbChange }) => {
   const { language } = useAuth();
@@ -155,24 +153,24 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
   const [result, setResult] = useState<ProspectivityApiResponse | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
 
-  // Tab 2 state: 4 persistent slots (GeoTIFF, Shapefile, CSV, GeoJSON)
-  const [currentStep, setCurrentStep] = useState<number>(2); // 1: Upload, 2: Validate, 3: Ready, 4: Predict
+  // Tab 2 state: 4 persistent slots (GeoTIFF, Shapefile, CSV, GeoJSON), backed
+  // by the real POST /api/upload -> GET /api/upload/{id} -> POST
+  // /api/upload/{id}/prospectivity pipeline. No step is ever marked done
+  // except in direct response to what the backend actually returned.
   const [gisSlots, setGisSlots] = useState<GISSlot[]>(INITIAL_GIS_SLOTS);
-  const [customPredictionReady, setCustomPredictionReady] = useState<boolean>(false);
-
-  // Simulate CSV morphing from uploading to completed on load
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setGisSlots(prev =>
-        prev.map(slot =>
-          slot.format === 'csv' && slot.uploadStatus === 'uploading'
-            ? { ...slot, uploadStatus: 'completed' }
-            : slot
-        )
-      );
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, []);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadSubmitError, setUploadSubmitError] = useState<string | null>(null);
+  const [uploadId, setUploadId] = useState<string | null>(null);
+  const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(false);
+  const [statusCheckError, setStatusCheckError] = useState<string | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatusApiResponse | null>(null);
+  // Prediction location for the upload-based flow - separate from Tab 1's
+  // lat/lng so Tab 1's boundary-checked map/steppers are untouched. Reuses
+  // the same default center as Tab 1 (BHARVELI_CENTER), same visual pattern.
+  const [uploadLat, setUploadLat] = useState<number>(BHARVELI_CENTER[0]);
+  const [uploadLng, setUploadLng] = useState<number>(BHARVELI_CENTER[1]);
+  const [isPredictingUpload, setIsPredictingUpload] = useState<boolean>(false);
+  const [uploadPredictError, setUploadPredictError] = useState<string | null>(null);
 
   const handleTabSwitch = (tab: 'existing' | 'upload') => {
     setActiveTab(tab);
@@ -235,7 +233,9 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
   const handleBackToMap = () => {
     setShowReport(false);
     if (onSubBreadcrumbChange) {
-      onSubBreadcrumbChange('Existing Study Area');
+      // The report is shared between both tabs - point the breadcrumb back
+      // at whichever tab actually produced it, not always Tab 1's label.
+      onSubBreadcrumbChange(activeTab === 'existing' ? 'Existing Study Area' : 'Upload GIS Context');
     }
   };
 
@@ -243,49 +243,107 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
     window.print();
   };
 
+  // Any change to the selected files invalidates a previous upload session -
+  // the backend has no "add a file to an existing upload" endpoint, so a new
+  // batch must be uploaded fresh.
+  const invalidateUploadSession = () => {
+    setUploadId(null);
+    setUploadStatus(null);
+    setStatusCheckError(null);
+    setUploadSubmitError(null);
+  };
+
   // Remove ONLY the file from the slot, preserving the card slot!
   const handleRemoveSlotFile = (format: 'tif' | 'shp' | 'csv' | 'geojson') => {
     setGisSlots(prev =>
-      prev.map(slot =>
-        slot.format === format
-          ? { ...slot, file: null, uploadStatus: 'idle' }
-          : slot
-      )
+      prev.map(slot => (slot.format === format ? { ...slot, file: null } : slot))
     );
+    invalidateUploadSession();
   };
 
-  // Handle file selection / upload into any slot:
-  // Starts with loading spinner, then morphs into green tick after completion
+  // Stage a real File object locally. Nothing is uploaded yet - that only
+  // happens when handleUploadAndValidate() actually calls the backend.
   const handleFileSelect = (format: 'tif' | 'shp' | 'csv' | 'geojson', e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const fileSize = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
-      const fileName = file.name;
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-      // 1. Immediately set uploading state with file details
-      setGisSlots(prev =>
-        prev.map(slot =>
-          slot.format === format
-            ? {
-                ...slot,
-                file: { name: fileName, size: fileSize },
-                uploadStatus: 'uploading',
-              }
-            : slot
-        )
-      );
+    setGisSlots(prev =>
+      prev.map(slot => (slot.format === format ? { ...slot, file } : slot))
+    );
+    invalidateUploadSession();
+  };
 
-      // 2. After 1.2s, morph loading animation to a tick
-      setTimeout(() => {
-        setGisSlots(prev =>
-          prev.map(slot =>
-            slot.format === format
-              ? { ...slot, uploadStatus: 'completed' }
-              : slot
-          )
-        );
-      }, 1200);
+  // Uploads every staged file together in ONE batch (the backend requires
+  // all files for a session in a single POST /api/upload), then reads back
+  // the real validation state via GET /api/upload/{id}. Never advances past
+  // what the backend actually confirmed.
+  const handleUploadAndValidate = async () => {
+    const filesToUpload = gisSlots.filter((slot): slot is GISSlot & { file: File } => slot.file !== null);
+    if (filesToUpload.length === 0) return;
+
+    setIsUploading(true);
+    setUploadSubmitError(null);
+    setUploadStatus(null);
+    setUploadId(null);
+
+    const category = filesToUpload.map(slot => slot.category).join(', ');
+    const uploadResponse = await api.uploadGISDataset(
+      filesToUpload.map(slot => slot.file),
+      category
+    );
+
+    setIsUploading(false);
+
+    if (!uploadResponse.ok) {
+      setUploadSubmitError(uploadResponse.message);
+      return;
     }
+
+    setUploadId(uploadResponse.data.upload_id);
+
+    setIsCheckingStatus(true);
+    setStatusCheckError(null);
+    const statusResponse = await api.getUploadStatus(uploadResponse.data.upload_id);
+    setIsCheckingStatus(false);
+
+    if (!statusResponse.ok) {
+      setStatusCheckError(statusResponse.message);
+      return;
+    }
+    setUploadStatus(statusResponse.data);
+  };
+
+  const handlePredictFromUpload = async () => {
+    if (!uploadId) return;
+
+    setIsPredictingUpload(true);
+    setUploadPredictError(null);
+
+    const response = await api.runProspectivityModelFromUpload(uploadId, {
+      latitude: uploadLat,
+      longitude: uploadLng,
+    });
+
+    setIsPredictingUpload(false);
+    if (response.ok) {
+      setResult(response.data);
+      setShowReport(true);
+      if (onSubBreadcrumbChange) {
+        onSubBreadcrumbChange('Model Prediction Report');
+      }
+    } else {
+      setUploadPredictError(response.message);
+    }
+  };
+
+  const hasSelectedFiles = gisSlots.some(slot => slot.file !== null);
+  const isReadyForPrediction = uploadStatus?.validation?.ready_for_prediction ?? false;
+  const missingFeatures = uploadStatus?.missing_features ?? [];
+  const availableFeatures = uploadStatus?.available_features ?? [];
+
+  const slotValidation = (slot: GISSlot) => {
+    if (!slot.file || !uploadStatus?.validation) return null;
+    return uploadStatus.validation.files.find(f => f.filename === slot.file!.name) ?? null;
   };
 
   return (
@@ -316,7 +374,7 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                 {pt.reportTitle}
               </h1>
               <p className="mt-1 text-xs text-slate-500">
-                Location: <strong className="text-slate-700">Bharveli & Balaghat Concession Sector</strong> · Target: <span className="font-mono text-slate-700">({result.location.latitude.toFixed(6)}° N, {result.location.longitude.toFixed(6)}° E)</span> · Computed Just now
+                Location: <strong className="text-slate-700">{result.data_source === 'existing_study_area' ? 'Bharveli & Balaghat Concession Sector' : 'Uploaded GIS Dataset'}</strong> · Target: <span className="font-mono text-slate-700">({result.location.latitude.toFixed(6)}° N, {result.location.longitude.toFixed(6)}° E)</span> · Computed Just now
               </p>
             </div>
 
@@ -417,7 +475,7 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
               <div className="p-3 print:p-2 bg-slate-50/70 rounded-lg border border-slate-100 print:border-slate-200">
                 <span className="text-slate-400 block text-[11px]">Concession Sector</span>
                 <span className="font-semibold text-slate-800 text-xs mt-0.5 block">
-                  Bharveli Deep Mine Block
+                  {result.data_source === 'existing_study_area' ? 'Bharveli Deep Mine Block' : 'Uploaded GIS Dataset'}
                 </span>
               </div>
               <div className="p-3 print:p-2 bg-slate-50/70 rounded-lg border border-slate-100 print:border-slate-200">
@@ -655,9 +713,11 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
               </div>
             </div>
           ) : (
-            /* TAB 2: UPLOAD GIS CONTEXT (4 Persistent Slots with loading-to-tick morph animation) */
+            /* TAB 2: UPLOAD GIS CONTEXT - real POST /api/upload -> GET /api/upload/{id} ->
+               POST /api/upload/{id}/prospectivity pipeline. No step here is ever marked
+               done except in direct response to what the backend actually returned. */
             <div className="bg-white rounded-xl border border-slate-200 p-7 shadow-subtle space-y-7">
-              {/* Header & Step progress trigger */}
+              {/* Header & Upload trigger */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-lg font-bold text-slate-900 tracking-tight">
@@ -669,62 +729,71 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                 </div>
 
                 <button
-                  onClick={() => {
-                    if (currentStep < 4) setCurrentStep(prev => prev + 1);
-                    if (currentStep === 3) setCustomPredictionReady(true);
-                  }}
-                  className="px-4 py-2 rounded-lg bg-brand-mint-bg text-brand-forest border border-brand-mint-border text-xs font-semibold hover:bg-brand-mint-bg/80 transition-colors self-start sm:self-auto flex items-center gap-2 cursor-pointer"
+                  onClick={handleUploadAndValidate}
+                  disabled={!hasSelectedFiles || isUploading || isCheckingStatus}
+                  className="px-4 py-2 rounded-lg bg-brand-mint-bg text-brand-forest border border-brand-mint-border text-xs font-semibold hover:bg-brand-mint-bg/80 transition-colors self-start sm:self-auto flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span>Validating GIS Layers ({currentStep}/4)</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  {isUploading || isCheckingStatus ? (
+                    <div className="w-3.5 h-3.5 border-2 border-brand-forest/30 border-t-brand-forest rounded-full animate-spin" />
+                  ) : (
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isUploading ? pt.uploading : isCheckingStatus ? pt.checkingValidation : pt.uploadAndValidate}</span>
                 </button>
               </div>
 
-              {/* 4-Step Horizontal Progress Bar */}
+              {(uploadSubmitError || statusCheckError) && (
+                <div className="p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs text-red-700">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
+                  <span>{uploadSubmitError || statusCheckError}</span>
+                </div>
+              )}
+
+              {/* 4-Step Horizontal Progress Bar - each node reflects real backend state */}
               <div className="flex items-center justify-between max-w-2xl text-xs font-medium text-slate-600">
-                {/* Step 1 */}
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-brand-forest text-white flex items-center justify-center text-xs">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                  <span className="font-semibold text-slate-900">Upload files</span>
-                </div>
-                <div className={`flex-1 h-0.5 mx-3 ${currentStep >= 2 ? 'bg-brand-forest' : 'bg-slate-200'}`} />
-
-                {/* Step 2 */}
+                {/* Step 1: files actually uploaded (real upload_id returned) */}
                 <div className="flex items-center gap-2">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
-                    currentStep >= 2 ? 'bg-brand-forest text-white' : 'bg-slate-200 text-slate-600'
+                    uploadId ? 'bg-brand-forest text-white' : 'bg-slate-200 text-slate-600'
                   }`}>
-                    2
+                    {uploadId ? <CheckCircle2 className="w-4 h-4" /> : '1'}
                   </div>
-                  <span className={currentStep >= 2 ? 'font-semibold text-slate-900' : 'text-slate-400'}>
-                    Validate layers
-                  </span>
+                  <span className={uploadId ? 'font-semibold text-slate-900' : 'text-slate-400'}>Upload files</span>
                 </div>
-                <div className={`flex-1 h-0.5 mx-3 ${currentStep >= 3 ? 'bg-brand-forest' : 'bg-slate-200'}`} />
+                <div className={`flex-1 h-0.5 mx-3 ${uploadStatus ? 'bg-brand-forest' : 'bg-slate-200'}`} />
 
-                {/* Step 3 */}
+                {/* Step 2: real validation response received */}
                 <div className="flex items-center gap-2">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
-                    currentStep >= 3 ? 'bg-brand-forest text-white' : 'bg-slate-200 text-slate-600'
+                    uploadStatus ? 'bg-brand-forest text-white' : 'bg-slate-200 text-slate-600'
                   }`}>
-                    3
+                    {uploadStatus ? <CheckCircle2 className="w-4 h-4" /> : '2'}
                   </div>
-                  <span className={currentStep >= 3 ? 'font-semibold text-slate-900' : 'text-slate-400'}>
+                  <span className={uploadStatus ? 'font-semibold text-slate-900' : 'text-slate-400'}>Validate layers</span>
+                </div>
+                <div className={`flex-1 h-0.5 mx-3 ${uploadStatus ? (isReadyForPrediction ? 'bg-brand-forest' : 'bg-amber-400') : 'bg-slate-200'}`} />
+
+                {/* Step 3: NOT always green - honestly reflects ready_for_prediction */}
+                <div className="flex items-center gap-2">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
+                    !uploadStatus ? 'bg-slate-200 text-slate-600' : isReadyForPrediction ? 'bg-brand-forest text-white' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {uploadStatus ? (isReadyForPrediction ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-3.5 h-3.5" />) : '3'}
+                  </div>
+                  <span className={!uploadStatus ? 'text-slate-400' : isReadyForPrediction ? 'font-semibold text-slate-900' : 'font-semibold text-amber-700'}>
                     Dataset ready
                   </span>
                 </div>
-                <div className={`flex-1 h-0.5 mx-3 ${currentStep >= 4 ? 'bg-brand-forest' : 'bg-slate-200'}`} />
+                <div className={`flex-1 h-0.5 mx-3 ${result?.data_source === 'uploaded_dataset' ? 'bg-brand-forest' : 'bg-slate-200'}`} />
 
-                {/* Step 4 */}
+                {/* Step 4: a real upload-based prediction actually completed */}
                 <div className="flex items-center gap-2">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
-                    currentStep >= 4 ? 'bg-brand-forest text-white' : 'bg-slate-200 text-slate-600'
+                    result?.data_source === 'uploaded_dataset' ? 'bg-brand-forest text-white' : 'bg-slate-200 text-slate-600'
                   }`}>
-                    4
+                    {result?.data_source === 'uploaded_dataset' ? <CheckCircle2 className="w-4 h-4" /> : '4'}
                   </div>
-                  <span className={currentStep >= 4 ? 'font-semibold text-slate-900' : 'text-slate-400'}>
+                  <span className={result?.data_source === 'uploaded_dataset' ? 'font-semibold text-slate-900' : 'text-slate-400'}>
                     Predict
                   </span>
                 </div>
@@ -734,14 +803,20 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
               <div className="space-y-3">
                 {gisSlots.map((slot) => {
                   const inputId = `upload-slot-${slot.format}`;
-                  const hasFile = !!slot.file;
+                  const hasFile = slot.file !== null;
+                  const isConfirmedUploaded = hasFile && uploadId !== null && uploadStatus !== null;
+                  const validation = slotValidation(slot);
+                  const isUnreadable = isConfirmedUploaded && validation !== null && !validation.readable;
+                  const isBusy = isUploading && hasFile;
 
                   return (
                     <div
                       key={slot.format}
                       className={`p-4 rounded-xl border transition-all ${
-                        slot.uploadStatus === 'uploading'
+                        isBusy
                           ? 'border-brand-mint-border bg-brand-mint-bg/20'
+                          : isUnreadable
+                          ? 'border-red-200 bg-red-50/50'
                           : hasFile
                           ? 'border-slate-200 bg-slate-50/50 hover:bg-slate-50'
                           : 'border-2 border-dashed border-slate-300 hover:border-brand-forest/60 bg-white hover:bg-slate-50/60'
@@ -758,13 +833,21 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                             </span>
                           </div>
 
-                          {slot.uploadStatus === 'uploading' ? (
+                          {isBusy ? (
                             <p className="text-xs text-brand-forest font-medium mt-1 animate-pulse">
-                              Uploading {slot.file?.name}...
+                              {pt.uploading} {slot.file?.name}
+                            </p>
+                          ) : isUnreadable ? (
+                            <p className="text-xs text-red-600 font-mono mt-1 truncate">
+                              {slot.file?.name} — {validation?.errors[0] ?? pt.unreadableLabel}
+                            </p>
+                          ) : isConfirmedUploaded ? (
+                            <p className="text-xs text-slate-600 font-mono mt-1 truncate">
+                              {slot.file?.name} ({formatFileSize(slot.file!.size)}) · {pt.uploadedLabel}
                             </p>
                           ) : hasFile ? (
-                            <p className="text-xs text-slate-600 font-mono mt-1 truncate">
-                              {slot.file?.name} ({slot.file?.size})
+                            <p className="text-xs text-amber-700 font-mono mt-1 truncate">
+                              {slot.file?.name} ({formatFileSize(slot.file!.size)}) · {pt.selectedNotUploaded}
                             </p>
                           ) : (
                             <label
@@ -779,9 +862,9 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                           )}
                         </div>
 
-                        {/* Action Column: Remove button + Loading spinner morphing to Tick */}
+                        {/* Action Column: Remove button + real status indicator */}
                         <div className="flex items-center gap-3 shrink-0">
-                          {hasFile && slot.uploadStatus === 'completed' && (
+                          {hasFile && !isBusy && (
                             <button
                               type="button"
                               onClick={() => handleRemoveSlotFile(slot.format)}
@@ -791,9 +874,8 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                             </button>
                           )}
 
-                          {/* Loading animation that morphs smoothly into a tick */}
                           <AnimatePresence mode="wait">
-                            {slot.uploadStatus === 'uploading' ? (
+                            {isBusy ? (
                               <motion.div
                                 key="loading-spinner"
                                 initial={{ scale: 0.6, opacity: 0 }}
@@ -802,7 +884,16 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                                 transition={{ duration: 0.2 }}
                                 className="w-5 h-5 border-2 border-brand-forest/30 border-t-brand-forest rounded-full animate-spin"
                               />
-                            ) : slot.uploadStatus === 'completed' ? (
+                            ) : isUnreadable ? (
+                              <motion.div
+                                key="error-icon"
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+                              >
+                                <AlertTriangle className="w-5 h-5 text-red-500" />
+                              </motion.div>
+                            ) : isConfirmedUploaded ? (
                               <motion.div
                                 key="completed-tick"
                                 initial={{ scale: 0, rotate: -45, opacity: 0 }}
@@ -811,6 +902,14 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                               >
                                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                               </motion.div>
+                            ) : hasFile ? (
+                              <motion.div
+                                key="pending-dot"
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                className="w-2.5 h-2.5 rounded-full bg-amber-500"
+                                title={pt.selectedNotUploaded}
+                              />
                             ) : (
                               <label
                                 htmlFor={inputId}
@@ -835,36 +934,100 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                 })}
               </div>
 
-              {/* Custom Prediction Results when step 4 completed */}
-              {customPredictionReady && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-6 p-5 rounded-xl bg-slate-50 border border-brand-mint-border"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-brand-forest uppercase tracking-wider flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" />
-                      Custom Concession Prospectivity Generated
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">
-                      <AnimatedNumber value={91} />% CONFIDENCE
-                    </span>
+              {/* Real validation summary - shown only once the backend has actually responded */}
+              {uploadStatus && (
+                <div className={`p-4 rounded-xl border ${isReadyForPrediction ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                  <div className="flex items-start gap-2.5">
+                    {isReadyForPrediction ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-semibold ${isReadyForPrediction ? 'text-emerald-800' : 'text-amber-800'}`}>
+                        {isReadyForPrediction ? pt.readyBanner : pt.notReadyBanner}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        {availableFeatures.length} {pt.availableFeaturesOf} · {missingFeatures.length} missing (of {availableFeatures.length + missingFeatures.length} required)
+                      </p>
+                      {uploadStatus.validation?.error_message && (
+                        <p className="text-[11px] text-red-600 mt-1">{uploadStatus.validation.error_message}</p>
+                      )}
+                      {!isReadyForPrediction && missingFeatures.length > 0 && (
+                        <div className="mt-2">
+                          <span className="text-[11px] font-semibold text-slate-600">{pt.missingFeaturesHeader}:</span>
+                          <div className="mt-1.5 max-h-32 overflow-y-auto flex flex-wrap gap-1 pr-1">
+                            {missingFeatures.map((feature) => (
+                              <span
+                                key={feature}
+                                className="px-1.5 py-0.5 rounded bg-white border border-amber-200 text-[10px] font-mono text-amber-700"
+                              >
+                                {feature}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-600">
-                    Uploaded layers processed through multi-class classifier. Found primary manganese horizon strike extending 4.2 km along SW shear envelope.
-                  </p>
+                </div>
+              )}
+
+              {/* Prediction location + Predict action - only meaningful once we have a real upload_id */}
+              {uploadId && uploadStatus && (
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-subtle space-y-4">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">{pt.predictLocationTitle}</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Latitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={uploadLat}
+                        onChange={(e) => setUploadLat(parseFloat(e.target.value))}
+                        className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Longitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={uploadLng}
+                        onChange={(e) => setUploadLng(parseFloat(e.target.value))}
+                        className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
                   <button
-                    onClick={() => {
-                      setShowReport(true);
-                      if (onSubBreadcrumbChange) onSubBreadcrumbChange('Model Prediction Report');
-                    }}
-                    className="mt-3 px-3.5 py-1.5 rounded-lg bg-brand-forest text-white text-xs font-semibold flex items-center gap-2 cursor-pointer hover:bg-brand-forest-hover"
+                    onClick={handlePredictFromUpload}
+                    disabled={!isReadyForPrediction || isPredictingUpload || !Number.isFinite(uploadLat) || !Number.isFinite(uploadLng)}
+                    className="w-full py-2.5 px-4 rounded-lg bg-brand-forest hover:bg-brand-forest-hover text-white text-xs font-semibold tracking-wide transition-all shadow-sm flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
-                    <span>View Detailed Report</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    {isPredictingUpload ? (
+                      <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <Play className="w-3.5 h-3.5 fill-white" />
+                        <span>{isPredictingUpload ? pt.predicting : pt.predictFromUpload}</span>
+                      </>
+                    )}
                   </button>
-                </motion.div>
+
+                  {!isReadyForPrediction && (
+                    <p className="text-[11px] text-slate-400">
+                      Prediction is disabled until your uploaded layers cover every required Model 1 feature - see the missing-features list above.
+                    </p>
+                  )}
+
+                  {uploadPredictError && (
+                    <div className="p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs text-red-700">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
+                      <span>{uploadPredictError}</span>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
