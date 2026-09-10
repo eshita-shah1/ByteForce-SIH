@@ -19,6 +19,7 @@ import { StudyAreaMap } from '../components/prospectivity/StudyAreaMap';
 import { BHARVELI_CENTER, isInsideStudyArea, formatCoordinate } from '../utils/geoUtils';
 import { useAuth } from '../context/AuthContext';
 import { AnimatedNumber } from '../components/core/AnimatedNumber';
+import { api, ProspectivityApiResponse } from '../services/api';
 
 const PT = {
   en: {
@@ -43,6 +44,15 @@ const PT = {
     estDepth: 'Est. Seam Depth',
     estGrade: 'Est. Ore Grade',
     strippingRatio: 'Stripping Ratio',
+    manganesePresent: 'MANGANESE PRESENT',
+    manganeseAbsent: 'MANGANESE ABSENT',
+    probabilityLabel: 'PROBABILITY',
+    thresholdLabel: 'DECISION THRESHOLD',
+    matchDistanceLabel: 'MATCH DISTANCE',
+    matchedCellLabel: 'MATCHED GRID CELL',
+    dataSourceLabel: 'DATA SOURCE',
+    featuresUsedLabel: 'MODEL FEATURES USED',
+    notAvailable: 'N/A',
   },
   hi: {
     title: 'मैंगनीज संभावना विश्लेषक',
@@ -66,6 +76,15 @@ const PT = {
     estDepth: 'अनुमानित सीम गहराई',
     estGrade: 'अनुमानित अयस्क ग्रेड',
     strippingRatio: 'स्ट्रिपिंग अनुपात',
+    manganesePresent: 'मैंगनीज मौजूद',
+    manganeseAbsent: 'मैंगनीज अनुपस्थित',
+    probabilityLabel: 'संभाव्यता',
+    thresholdLabel: 'निर्णय सीमा',
+    matchDistanceLabel: 'मिलान दूरी',
+    matchedCellLabel: 'मिलान ग्रिड सेल',
+    dataSourceLabel: 'डेटा स्रोत',
+    featuresUsedLabel: 'उपयोग की गई मॉडल विशेषताएं',
+    notAvailable: 'उपलब्ध नहीं',
   },
 } as const;
 
@@ -133,6 +152,8 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
   const [lng, setLng] = useState<number>(BHARVELI_CENTER[1]);
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
   const [showOutsideBoundaryModal, setShowOutsideBoundaryModal] = useState<boolean>(false);
+  const [result, setResult] = useState<ProspectivityApiResponse | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
 
   // Tab 2 state: 4 persistent slots (GeoTIFF, Shapefile, CSV, GeoJSON)
   const [currentStep, setCurrentStep] = useState<number>(2); // 1: Upload, 2: Validate, 3: Ready, 4: Predict
@@ -189,19 +210,26 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
     }
   };
 
-  const handleRunModel = () => {
+  const handleRunModel = async () => {
     if (!isInsideStudyArea(lat, lng)) {
       setShowOutsideBoundaryModal(true);
       return;
     }
     setIsCalculating(true);
-    setTimeout(() => {
-      setIsCalculating(false);
+    setRunError(null);
+
+    const response = await api.runProspectivityModel({ latitude: lat, longitude: lng });
+
+    setIsCalculating(false);
+    if (response.ok) {
+      setResult(response.data);
       setShowReport(true);
       if (onSubBreadcrumbChange) {
         onSubBreadcrumbChange('Model Prediction Report');
       }
-    }, 650);
+    } else {
+      setRunError(response.message);
+    }
   };
 
   const handleBackToMap = () => {
@@ -263,7 +291,7 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-6 animate-fadeIn print:p-0 print:max-w-none">
       {/* If Report View is active, display the full detailed report screen */}
-      {showReport ? (
+      {showReport && result ? (
         <div id="printable-report" className="space-y-6 print:space-y-3 print:w-full">
           {/* Print-only professional header branding */}
           <div className="hidden print:flex items-center justify-between pb-2 mb-2 border-b border-slate-300">
@@ -288,7 +316,7 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                 {pt.reportTitle}
               </h1>
               <p className="mt-1 text-xs text-slate-500">
-                Location: <strong className="text-slate-700">Bharveli & Balaghat Concession Sector</strong> · Target: <span className="font-mono text-slate-700">({lat.toFixed(6)}° N, {lng.toFixed(6)}° E)</span> · Computed Just now
+                Location: <strong className="text-slate-700">Bharveli & Balaghat Concession Sector</strong> · Target: <span className="font-mono text-slate-700">({result.location.latitude.toFixed(6)}° N, {result.location.longitude.toFixed(6)}° E)</span> · Computed Just now
               </p>
             </div>
 
@@ -324,92 +352,52 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
             <div className="relative z-10 flex flex-col items-center my-3 print:my-1">
               <div className="flex items-baseline justify-center gap-3">
                 <span className="text-7xl sm:text-8xl md:text-9xl print:text-5xl font-black text-brand-forest tracking-tighter font-mono drop-shadow-xs">
-                  <AnimatedNumber value={87} springOptions={{ bounce: 0, duration: 2000 }} />%
+                  <AnimatedNumber value={Math.round(result.probability * 100)} springOptions={{ bounce: 0, duration: 2000 }} />%
                 </span>
                 <span className="text-base sm:text-lg print:text-sm font-bold text-slate-500 uppercase tracking-wider">
                   {pt.confidence}
                 </span>
               </div>
 
-              <span className="mt-3 print:mt-1 px-4 py-1.5 print:py-0.5 rounded-full text-xs font-bold bg-brand-mint-bg text-brand-mint-text border border-brand-mint-border tracking-wider shadow-xs">
-                {pt.highProspectivity}
+              <span className={`mt-3 print:mt-1 px-4 py-1.5 print:py-0.5 rounded-full text-xs font-bold tracking-wider shadow-xs ${
+                result.prediction === 'manganese_present'
+                  ? 'bg-brand-mint-bg text-brand-mint-text border border-brand-mint-border'
+                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+              }`}>
+                {result.prediction === 'manganese_present' ? pt.manganesePresent : pt.manganeseAbsent}
               </span>
             </div>
 
-            {/* Technical Synthesis Description Centered */}
+            {/* Real backend result, in plain language - no fabricated geological narrative */}
             <p className="relative z-10 max-w-2xl text-xs sm:text-sm print:text-xs text-slate-600 leading-relaxed mt-3 print:mt-1.5">
-              High gravimetric anomaly correlated with Sausar Group phyllite/schist contact zone and historical high-grade manganese reef strike. Multi-variate spatial evidence indicates strong mineralized body continuation along the northeast plunging axis.
+              Model 1 predicts <strong className="text-slate-800">{result.prediction === 'manganese_present' ? 'manganese present' : 'manganese absent'}</strong> at this location, with a probability of {(result.probability * 100).toFixed(1)}% against a decision threshold of {(result.decision_threshold * 100).toFixed(1)}%.
+              {result.matched_cell_id && (
+                <> Matched to study-area grid cell <strong className="text-slate-800">{result.matched_cell_id}</strong>{result.match_distance_m != null ? `, ${result.match_distance_m.toFixed(1)}m away` : ''}.</>
+              )}
             </p>
 
-            {/* 3 Key Metrics Row Centered */}
+            {/* 3 Key Metrics Row Centered - real Model 1 output, not invented ore-grade/depth/stripping figures */}
             <div className="relative z-10 mt-8 pt-6 print:mt-3 print:pt-3 border-t border-slate-100 print:border-slate-200 grid grid-cols-1 sm:grid-cols-3 print:grid-cols-3 gap-4 sm:gap-6 print:gap-3 w-full max-w-2xl text-center">
               <div className="p-3.5 print:p-2 rounded-xl bg-slate-50/80 print:bg-slate-50 border border-slate-100 print:border-slate-200">
-                <span className="text-slate-400 block text-[11px] font-semibold uppercase tracking-wider">{pt.estGrade}</span>
+                <span className="text-slate-400 block text-[11px] font-semibold uppercase tracking-wider">{pt.probabilityLabel}</span>
                 <span className="font-extrabold text-slate-900 font-mono text-base sm:text-lg print:text-sm mt-0.5 block">
-                  <AnimatedNumber value={44.8} decimals={1} />% Mn
+                  <AnimatedNumber value={result.probability * 100} decimals={1} />%
                 </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">High Grade Metallurgical</span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">Model 1 output</span>
               </div>
               <div className="p-3.5 print:p-2 rounded-xl bg-slate-50/80 print:bg-slate-50 border border-slate-100 print:border-slate-200">
-                <span className="text-slate-400 block text-[11px] font-semibold uppercase tracking-wider">{pt.estDepth}</span>
+                <span className="text-slate-400 block text-[11px] font-semibold uppercase tracking-wider">{pt.thresholdLabel}</span>
                 <span className="font-extrabold text-emerald-600 font-mono text-base sm:text-lg print:text-sm mt-0.5 block">
-                  <AnimatedNumber value={142} />m - <AnimatedNumber value={195} />m
+                  <AnimatedNumber value={result.decision_threshold * 100} decimals={1} />%
                 </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">Sub-surface Horizon</span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">Present/absent cutoff</span>
               </div>
               <div className="p-3.5 print:p-2 rounded-xl bg-slate-50/80 print:bg-slate-50 border border-slate-100 print:border-slate-200">
-                <span className="text-slate-400 block text-[11px] font-semibold uppercase tracking-wider">{pt.strippingRatio}</span>
+                <span className="text-slate-400 block text-[11px] font-semibold uppercase tracking-wider">{pt.matchDistanceLabel}</span>
                 <span className="font-extrabold text-slate-900 font-mono text-base sm:text-lg print:text-sm mt-0.5 block">
-                  <AnimatedNumber value={3.4} decimals={1} /> : 1
+                  {result.match_distance_m != null ? <><AnimatedNumber value={result.match_distance_m} decimals={1} />m</> : pt.notAvailable}
                 </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">Favorable Extraction</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 2. Regional Geological Context (3 cards) */}
-          <div className="break-inside-avoid print:mt-2">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5 print:mb-1.5">
-              {pt.geoContext}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-4 print:gap-3">
-              {/* Stratigraphy */}
-              <div className="bg-white p-4 print:p-2.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle break-inside-avoid">
-                <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                  STRATIGRAPHY
-                </span>
-                <h4 className="mt-2 text-xs font-bold text-slate-900">
-                  Mansar Formation (Sausar Group)
-                </h4>
-                <p className="mt-1 text-xs text-slate-500">
-                  Gondite & bedded manganese oxide ore horizon strike
-                </p>
-              </div>
-
-              {/* Structural Setting */}
-              <div className="bg-white p-4 print:p-2.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle break-inside-avoid">
-                <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                  STRUCTURAL SETTING
-                </span>
-                <h4 className="mt-2 text-xs font-bold text-slate-900">
-                  ENE-WSW Regional Shear Corridor
-                </h4>
-                <p className="mt-1 text-xs text-slate-500">
-                  Steeply dipping overturn fold limb (65°-75° NW)
-                </p>
-              </div>
-
-              {/* Geophysical Anomaly */}
-              <div className="bg-white p-4 print:p-2.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle break-inside-avoid">
-                <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                  GEOPHYSICAL ANOMALY
-                </span>
-                <h4 className="mt-2 text-xs font-bold text-slate-900">
-                  +4.2 mGal Residual Bouguer High
-                </h4>
-                <p className="mt-1 text-xs text-slate-500">
-                  Coupled with linear aeromagnetic discontinuity
-                </p>
+                <span className="text-[10px] text-slate-400 block mt-0.5">To nearest grid cell</span>
               </div>
             </div>
           </div>
@@ -423,7 +411,7 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
               <div className="p-3 print:p-2 bg-slate-50/70 rounded-lg border border-slate-100 print:border-slate-200">
                 <span className="text-slate-400 block text-[11px]">Target Coordinates</span>
                 <span className="font-semibold text-slate-800 font-mono text-xs mt-0.5 block">
-                  {lat.toFixed(6)}° N, {lng.toFixed(6)}° E
+                  {result.location.latitude.toFixed(6)}° N, {result.location.longitude.toFixed(6)}° E
                 </span>
               </div>
               <div className="p-3 print:p-2 bg-slate-50/70 rounded-lg border border-slate-100 print:border-slate-200">
@@ -439,130 +427,22 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                 </span>
               </div>
               <div className="p-3 print:p-2 bg-slate-50/70 rounded-lg border border-slate-100 print:border-slate-200">
-                <span className="text-slate-400 block text-[11px]">Host Lithology</span>
+                <span className="text-slate-400 block text-[11px]">{pt.matchedCellLabel}</span>
                 <span className="font-semibold text-slate-800 text-xs mt-0.5 block">
-                  Phyllite / Quartzite Reef
+                  {result.matched_cell_id ?? pt.notAvailable}
                 </span>
               </div>
               <div className="p-3 print:p-2 bg-slate-50/70 rounded-lg border border-slate-100 print:border-slate-200">
-                <span className="text-slate-400 block text-[11px]">Structural Strike</span>
+                <span className="text-slate-400 block text-[11px]">{pt.dataSourceLabel}</span>
                 <span className="font-semibold text-slate-800 text-xs mt-0.5 block">
-                  N60°E, Dip 70° NW
+                  {result.data_source === 'existing_study_area' ? 'Existing study-area grid' : 'Uploaded dataset'}
                 </span>
               </div>
               <div className="p-3 print:p-2 bg-slate-50/70 rounded-lg border border-slate-100 print:border-slate-200">
-                <span className="text-slate-400 block text-[11px]">Grid Projection</span>
+                <span className="text-slate-400 block text-[11px]">{pt.featuresUsedLabel}</span>
                 <span className="font-semibold text-slate-800 font-mono text-xs mt-0.5 block">
-                  UTM 44N (EPSG:32644)
+                  {result.features_used.length}
                 </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 4. Key Contributing Geological Factors */}
-          <div className="bg-white p-6 print:p-3.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle space-y-4 print:space-y-1.5 break-inside-avoid print:mt-2">
-            <h3 className="text-xs font-bold text-slate-900 tracking-tight">
-              {pt.contributingFactors}
-            </h3>
-            <div className="divide-y divide-slate-100 print:divide-slate-200">
-              <div className="py-3.5 print:py-1.5 flex items-start justify-between gap-4">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800">
-                    Gravimetric Bouguer Anomaly
-                  </h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Coincident +4.2 mGal gravity high indicating dense sub-surface manganese oxide accumulation.
-                  </p>
-                </div>
-                <span className="text-xs font-bold text-brand-forest font-mono shrink-0">
-                  <AnimatedNumber value={38} />% weight
-                </span>
-              </div>
-
-              <div className="py-3.5 print:py-1.5 flex items-start justify-between gap-4">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800">
-                    Stratigraphic Contact Proximity
-                  </h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Target is situated within 45m of the high-probability Mansar schist-quartzite transition zone.
-                  </p>
-                </div>
-                <span className="text-xs font-bold text-brand-forest font-mono shrink-0">
-                  <AnimatedNumber value={27} />% weight
-                </span>
-              </div>
-
-              <div className="py-3.5 print:py-1.5 flex items-start justify-between gap-4">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800">
-                    Aeromagnetic Gradient Lineament
-                  </h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Coincident magnetic low signature characteristic of non-magnetic braunite/pyrolusite ore bodies.
-                  </p>
-                </div>
-                <span className="text-xs font-bold text-brand-forest font-mono shrink-0">
-                  <AnimatedNumber value={20} />% weight
-                </span>
-              </div>
-
-              <div className="py-3.5 print:py-1.5 flex items-start justify-between gap-4">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800">
-                    Historical Borehole Assay Continuity
-                  </h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    High spatial correlation with historical adjacent borehole assays averaging 42.5% Mn grade.
-                  </p>
-                </div>
-                <span className="text-xs font-bold text-brand-forest font-mono shrink-0">
-                  <AnimatedNumber value={15} />% weight
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 5. Recommended Exploration Program */}
-          <div className="bg-white p-6 print:p-3.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle space-y-4 print:space-y-1.5 break-inside-avoid print:mt-2">
-            <h3 className="text-xs font-bold text-slate-900 tracking-tight">
-              {pt.recommendations}
-            </h3>
-            <div className="space-y-3 print:space-y-1.5">
-              <div className="flex items-start gap-3">
-                <div className="w-5 h-5 rounded-full bg-brand-mint-bg text-brand-forest flex items-center justify-center text-xs font-bold shrink-0">
-                  1
-                </div>
-                <p className="text-xs text-slate-700 leading-relaxed pt-0.5">
-                  <strong className="text-slate-900">Diamond Core Infill Drilling:</strong> Execute 3 inclined core holes (180m–220m depth) spaced 120m apart along strike to intersect the modeled manganese reef.
-                </p>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-5 h-5 rounded-full bg-brand-mint-bg text-brand-forest flex items-center justify-center text-xs font-bold shrink-0">
-                  2
-                </div>
-                <p className="text-xs text-slate-700 leading-relaxed pt-0.5">
-                  <strong className="text-slate-900">High-Density Ground Gravity Survey:</strong> Run 25m station intervals across the anomaly peak to demarcate boundary fault displacement.
-                </p>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-5 h-5 rounded-full bg-brand-mint-bg text-brand-forest flex items-center justify-center text-xs font-bold shrink-0">
-                  3
-                </div>
-                <p className="text-xs text-slate-700 leading-relaxed pt-0.5">
-                  <strong className="text-slate-900">Geochemical & Phosphorus Assay:</strong> Verify core sample Mn:Fe ratio (&gt;6:1) and confirm low phosphorus (&lt;0.15% P) for ferro-manganese metallurgical specs.
-                </p>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-5 h-5 rounded-full bg-brand-mint-bg text-brand-forest flex items-center justify-center text-xs font-bold shrink-0">
-                  4
-                </div>
-                <p className="text-xs text-slate-700 leading-relaxed pt-0.5">
-                  <strong className="text-slate-900">3D Wireframe Resource Modeling:</strong> Synthesize borehole intercepts into block model wireframe to upgrade inferred tonnage to indicated category.
-                </p>
               </div>
             </div>
           </div>
@@ -746,6 +626,13 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                       </>
                     )}
                   </button>
+
+                  {runError && (
+                    <div className="p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs text-red-700">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
+                      <span>{runError}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Target Sampling Guidance Card (Replaces the removed Telemetry Result card) */}

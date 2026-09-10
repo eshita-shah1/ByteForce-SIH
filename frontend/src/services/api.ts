@@ -6,6 +6,23 @@ export type LoginResult =
   | { ok: true; user: User }
   | { ok: false; reason: 'invalid_credentials' | 'server_error'; message: string };
 
+/** Mirrors backend app/schemas/prospectivity.py's ProspectivityResponse exactly. */
+export interface ProspectivityApiResponse {
+  success: boolean;
+  location: { latitude: number; longitude: number };
+  prediction: 'manganese_present' | 'manganese_absent';
+  probability: number;
+  decision_threshold: number;
+  data_source: 'existing_study_area' | 'uploaded_dataset';
+  matched_cell_id: string | null;
+  match_distance_m: number | null;
+  features_used: string[];
+}
+
+export type ProspectivityApiResult =
+  | { ok: true; data: ProspectivityApiResponse }
+  | { ok: false; message: string };
+
 export const api = {
   /**
    * User authentication endpoint (POST /api/auth/login). Distinguishes
@@ -164,27 +181,27 @@ export const api = {
   },
 
   /**
-   * Run Prospectivity Model via backend (POST /api/prospectivity).
-   *
-   * NOTE: nothing in the current UI calls this yet (ProspectivityView's
-   * report is a static mockup) - this corrects the route/payload/response
-   * contract so it is ready to use, without redesigning that view's report
-   * (which shows many fields - Mn grade, seam depth, stripping ratio,
-   * contributing geological factors - that the real backend response
-   * doesn't provide).
+   * Run Prospectivity Model via backend (POST /api/prospectivity). Wired
+   * into ProspectivityView's "Existing Study Area" tab - see that
+   * component for how the real response fields are displayed.
    */
-  async runProspectivityModel(payload: { latitude: number; longitude: number }) {
+  async runProspectivityModel(payload: { latitude: number; longitude: number }): Promise<ProspectivityApiResult> {
+    let res: Response;
     try {
-      const res = await fetch(`${API_BASE_URL}/prospectivity`, {
+      res = await fetch(`${API_BASE_URL}/prospectivity`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error('Prospectivity model failed');
-      return await res.json();
     } catch (err) {
-      console.warn('Backend prospectivity endpoint unreachable:', err);
-      return null;
+      console.error('Backend prospectivity endpoint unreachable:', err);
+      return { ok: false, message: 'Unable to reach the server. Please try again.' };
     }
+
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { ok: false, message: body?.message || `Server error (${res.status}). Please try again.` };
+    }
+    return { ok: true, data: body as ProspectivityApiResponse };
   }
 };
