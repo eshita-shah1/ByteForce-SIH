@@ -50,7 +50,10 @@ class Settings(BaseSettings):
     upload_ttl_hours: int = 24
 
     # --- Admin auth ---
-    admin_username: str = Field(default="admin")
+    # Email-shaped by default: the frontend's login form is <input type="email">,
+    # so an ADMIN_USERNAME without an "@" fails client-side validation before
+    # it ever reaches this backend. Override via env for real deployments.
+    admin_username: str = Field(default="admin@terrascope.local")
     admin_password: str = Field(default="")  # must be set via env in real deployments
     admin_session_secret: str = Field(default="change-me-in-production")
 

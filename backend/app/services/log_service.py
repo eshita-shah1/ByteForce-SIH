@@ -8,6 +8,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.db.models import ModelRunLog
+from app.schemas.shortfall_report import ShortfallReportData
 
 logger = logging.getLogger("app.logs")
 
@@ -20,6 +21,7 @@ def record_run(
     target_site: str,
     metric_highlight: str,
     status: str = "Completed",
+    report_ref: ShortfallReportData | None = None,
 ) -> None:
     """Best-effort audit write: a logging failure must never break the
     caller's actual prediction response, so errors are swallowed (and
@@ -33,6 +35,7 @@ def record_run(
                 target_site=target_site,
                 status=status,
                 metric_highlight=metric_highlight,
+                report_ref_json=report_ref.model_dump_json(by_alias=True) if report_ref else None,
             )
         )
         db.commit()

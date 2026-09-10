@@ -23,7 +23,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/manganese_gis
       CORS_ORIGINS: http://localhost:5173,http://localhost:3000
-      ADMIN_USERNAME: admin
+      # Email-shaped: the frontend's login form is <input type="email">.
+      ADMIN_USERNAME: admin@terrascope.local
       ADMIN_PASSWORD: change-me
     ports:
       - "8000:8000"

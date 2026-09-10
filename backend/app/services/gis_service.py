@@ -41,7 +41,11 @@ def find_nearest_cell(db: Session, latitude: float, longitude: float, settings: 
     """Returns the nearest prospectivity_features row within
     settings.grid_match_tolerance_m, or None if nothing is close enough."""
     feature_columns = get_feature_columns()
-    select_cols = ", ".join(feature_columns)
+    # Double-quoted: several feature columns are mixed-case (e.g. may_blue_B02),
+    # and Postgres folds unquoted identifiers to lowercase - without quoting,
+    # this SQL fails with "column ... does not exist" even though the
+    # (case-preserved) column is right there.
+    select_cols = ", ".join(f'"{c}"' for c in feature_columns)
 
     sql = text(
         f"""

@@ -82,7 +82,11 @@ def _safe_extract_zip(zip_path: Path, dest_dir: Path) -> list[Path]:
 
 
 async def save_uploaded_files(
-    db: Session, upload_id: str, files: list[FastAPIUploadFile], settings: Settings
+    db: Session,
+    upload_id: str,
+    files: list[FastAPIUploadFile],
+    settings: Settings,
+    category: str | None = None,
 ) -> None:
     upload_dir = settings.upload_dir / upload_id
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -121,6 +125,7 @@ async def save_uploaded_files(
                             stored_path=str(path),
                             file_type=file_type or "companion",
                             size_bytes=path.stat().st_size,
+                            category=category,
                         )
                     )
         else:
@@ -135,6 +140,7 @@ async def save_uploaded_files(
                     stored_path=str(dest),
                     file_type=file_type or "companion",
                     size_bytes=size,
+                    category=category,
                 )
             )
 

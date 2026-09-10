@@ -22,7 +22,11 @@ def login(request: LoginRequest, settings: Settings = Depends(get_settings)):
     if not verify_login_credentials(request.email, request.password, settings):
         raise AuthError("Invalid email or password.")
 
-    display_name = settings.admin_username.replace(".", " ").replace("_", " ").strip() or "Admin"
+    # ADMIN_USERNAME is email-shaped (see app/core/config.py) - use the local
+    # part only, so "admin@terrascope.local" displays as "Admin", not
+    # "Admin@Terrascope Local".
+    local_part = settings.admin_username.split("@", 1)[0]
+    display_name = local_part.replace(".", " ").replace("_", " ").strip() or "Admin"
     name_parts = display_name.split()
     initials = (
         f"{name_parts[0][0]}{name_parts[-1][0]}".upper()

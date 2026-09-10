@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, field_validator
 
 from app.ml.model2.feature_schema import CATEGORICAL_FEATURES
+from app.schemas.shortfall_report import ShortfallReportData
 
 
 class ShortfallRequest(BaseModel):
@@ -89,3 +90,6 @@ class ShortfallResponse(BaseModel):
     primary_causes: list[str]
     corrective_measures: list[CorrectiveMeasure]
     feature_sources: dict[str, str]
+    # Frontend-shaped report (see app/services/shortfall_report.py) - additive,
+    # existing consumers of this response are unaffected.
+    report: ShortfallReportData | None = None

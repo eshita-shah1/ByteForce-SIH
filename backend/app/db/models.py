@@ -117,6 +117,7 @@ class UploadFile(Base):
     size_bytes = Column(Integer, nullable=False)
     detected_crs = Column(String, nullable=True)
     metadata_json = Column(Text, nullable=True)
+    category = Column(String, nullable=True)  # free-text, submitted by the caller at upload time
     created_at = Column(DateTime(timezone=True), default=dt.datetime.utcnow)
 
 
@@ -135,4 +136,8 @@ class ModelRunLog(Base):
     target_site = Column(String, nullable=False)
     status = Column(String, nullable=False, default="Completed")  # Completed|Pending|Flagged
     metric_highlight = Column(String, nullable=False)
+    # Full RunLog.reportRef payload (frontend/src/types/index.ts ShortfallReportData),
+    # built entirely from real request/response values - see
+    # app/services/shortfall_report.py. Only set for Shortfall runs.
+    report_ref_json = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=dt.datetime.utcnow, nullable=False, index=True)

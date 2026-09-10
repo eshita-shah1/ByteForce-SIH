@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -21,11 +21,12 @@ router = APIRouter(tags=["upload"])
 @router.post("/api/upload", response_model=UploadCreateResponse)
 async def create_upload(
     files: list[UploadFile] = File(...),
+    category: str | None = Form(None),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
     upload_id = upload_service.create_upload(db, settings)
-    await upload_service.save_uploaded_files(db, upload_id, files, settings)
+    await upload_service.save_uploaded_files(db, upload_id, files, settings, category=category)
     result = upload_service.validate_upload(db, upload_id)
     return UploadCreateResponse(upload_id=upload_id, status=result.status)
 

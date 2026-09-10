@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.schemas.logs import RunLogResponse
+from app.schemas.shortfall_report import ShortfallReportData
 from app.services import log_service
 
 router = APIRouter(tags=["logs"])
@@ -27,6 +28,7 @@ def get_logs(db: Session = Depends(get_db)):
             timestamp=run.created_at.isoformat() if run.created_at else "",
             status=run.status,
             metric_highlight=run.metric_highlight,
+            report_ref=ShortfallReportData.model_validate_json(run.report_ref_json) if run.report_ref_json else None,
         )
         for run in runs
     ]

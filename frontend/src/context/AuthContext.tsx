@@ -48,35 +48,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Please enter both email and password.' };
     }
 
-    // Try backend API login
-    const apiRes = await api.login(trimmedEmail, pass);
-
-    let authenticatedUser: User;
-    if (apiRes && apiRes.user) {
-      authenticatedUser = apiRes.user;
-    } else {
-      // Local session initialization when backend service is offline
-      const username = trimmedEmail.split('@')[0];
-      const name = username
-        .split(/[._-]/)
-        .map(p => p.charAt(0).toUpperCase() + p.slice(1))
-        .join(' ') || 'Engineer';
-      
-      const parts = name.split(' ');
-      const initials = parts.length > 1
-        ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
-        : name.slice(0, 2).toUpperCase();
-
-      authenticatedUser = {
-        id: `usr-${Date.now()}`,
-        name,
-        email: trimmedEmail,
-        initials,
-        role: 'Mining Engineer'
-      };
+    // Authenticate against the backend. Invalid credentials and backend/
+    // network failures both fail the login - neither ever fabricates a
+    // signed-in identity (a wrong password must not grant access, and a
+    // downed backend must not be silently indistinguishable from one).
+    const result = await api.login(trimmedEmail, pass);
+    if (!result.ok) {
+      return { success: false, error: result.message };
     }
 
-    setUser(authenticatedUser);
+    setUser(result.user);
     setIsLoggedIn(true);
     setLoginModalOpen(false);
 

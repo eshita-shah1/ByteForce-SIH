@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.shortfall_report import ShortfallReportData
+
 
 class RunLogResponse(BaseModel):
     """Shaped to match frontend/src/types/index.ts's RunLog exactly (camelCase
@@ -18,3 +20,4 @@ class RunLogResponse(BaseModel):
     timestamp: str
     status: Literal["Completed", "Pending", "Flagged"]
     metric_highlight: str = Field(alias="metricHighlight")
+    report_ref: ShortfallReportData | None = Field(default=None, alias="reportRef")

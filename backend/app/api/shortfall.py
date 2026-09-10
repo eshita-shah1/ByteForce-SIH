@@ -7,6 +7,7 @@ from app.core.config import Settings, get_settings
 from app.db.database import get_db
 from app.schemas.shortfall import ShortfallRequest, ShortfallResponse
 from app.services import log_service
+from app.services.shortfall_report import build_shortfall_report
 from app.services.shortfall_service import predict_shortfall
 
 router = APIRouter(tags=["shortfall"])
@@ -19,6 +20,7 @@ async def shortfall(
     settings: Settings = Depends(get_settings),
 ):
     result = await predict_shortfall(request, settings)
+    result.report = build_shortfall_report(request, result)
     log_service.record_run(
         db,
         model_type="Shortfall",
@@ -26,5 +28,6 @@ async def shortfall(
         target_site=result.pit_id,
         metric_highlight=f"{result.shortfall_percentage:.1f}% shortfall · {result.risk}",
         status="Flagged" if result.risk in ("Alert", "Critical") else "Completed",
+        report_ref=result.report,
     )
     return result
