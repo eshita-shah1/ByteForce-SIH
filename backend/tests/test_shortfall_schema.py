@@ -10,15 +10,15 @@ def _valid_payload(**overrides):
         "timestamp": "2026-09-08T10:00:00",
         "shift_type": "Shift_1_Morning",
         "pit_id": "BAL_NORTH_PIT",
-        "target_production_tonnes": 5000,
+        "target_production_tonnes": 100,
         "planned_operating_hours": 8,
         "surface_water_pooling_pct": 5,
         "excavators_available": 5,
         "dump_trucks_operational": 10,
         "workers_scheduled": 50,
         "workers_available": 48,
-        "previous_shift_production_tonnes": 4800,
-        "previous_day_production_tonnes": 9600,
+        "previous_shift_production_tonnes": 85,
+        "previous_day_production_tonnes": 170,
     }
     payload.update(overrides)
     return payload
@@ -57,6 +57,21 @@ def test_request_fields_cover_pipeline_columns():
         if col in ("month", "day_of_week"):
             continue
         assert col in dumped, f"{col} is required by the trained pipeline but missing from ShortfallRequest"
+
+
+def test_target_production_tonnes_rejects_zero():
+    with pytest.raises(ValidationError):
+        ShortfallRequest(**_valid_payload(target_production_tonnes=0))
+
+
+def test_target_production_tonnes_rejects_above_200():
+    with pytest.raises(ValidationError):
+        ShortfallRequest(**_valid_payload(target_production_tonnes=201))
+
+
+def test_target_production_tonnes_accepts_boundaries():
+    assert ShortfallRequest(**_valid_payload(target_production_tonnes=1)).target_production_tonnes == 1
+    assert ShortfallRequest(**_valid_payload(target_production_tonnes=200)).target_production_tonnes == 200
 
 
 def test_obsolete_v1_fields_are_no_longer_accepted():

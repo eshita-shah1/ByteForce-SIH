@@ -244,21 +244,29 @@ POST /api/shortfall
   "timestamp": "2026-09-08T06:00:00",
   "shift_type": "Shift_1_Morning",
   "pit_id": "BAL_NORTH_PIT",
-  "target_production_tonnes": 5000,
+  "target_production_tonnes": 100,
   "planned_operating_hours": 8,
   "workers_scheduled": 50,
   "workers_available": 48,
   "excavators_available": 5,
   "dump_trucks_operational": 10,
   "surface_water_pooling_pct": 0,
-  "previous_shift_production_tonnes": 4800,
-  "previous_day_production_tonnes": 9600
+  "previous_shift_production_tonnes": 85,
+  "previous_day_production_tonnes": 170
 }
 ```
 `rainfall_intensity_mm`, `cumulative_rainfall_72h`, `soil_moisture_index`
 are optional — omit them to have the backend fetch live values from
 Open-Meteo (no API key needed) for the pit's coordinates; the response's
 `feature_sources` field says which fields came from you vs. the weather API.
+
+`target_production_tonnes` is constrained to 1–200 (tonnes/shift). The
+original training dataset for the current Model 2 artifact is unavailable,
+so this is not a claim about the model's training distribution — it's the
+practical range supported by black-box analysis of the fitted model itself
+(large-scale input sweeps against the real pipeline; see git history for
+details). Values above 200 are rejected by the schema rather than silently
+accepted and fed to a model that has never been observed to approach them.
 
 ## 7. Upload workflow (non-existing study area)
 

@@ -50,8 +50,8 @@ const ST = {
     previousShiftProduction: 'Previous Shift Production (tonnes)',
     previousDayProduction: 'Previous Day Production (tonnes)',
     tonnage: 'TONNAGE',
-    expectedTonnage: 'Target Production Tonnes',
-    tonnageHelp: 'Target production for this shift or period.',
+    expectedTonnage: 'Target Production (tonnes/shift)',
+    tonnageHelp: 'Enter a value between 1 and 200 tonnes/shift, the practical operating range for this model.',
     runAssessment: 'Run shortfall assessment',
 
     // Screen 3 Report
@@ -121,8 +121,8 @@ const ST = {
     previousShiftProduction: 'पिछली शिफ्ट उत्पादन (टन)',
     previousDayProduction: 'पिछले दिन का उत्पादन (टन)',
     tonnage: 'टन भार',
-    expectedTonnage: 'लक्षित उत्पादन टन भार',
-    tonnageHelp: 'इस शिफ्ट या अवधि के लिए लक्षित उत्पादन।',
+    expectedTonnage: 'लक्षित उत्पादन (टन/शिफ्ट)',
+    tonnageHelp: '1 से 200 टन/शिफ्ट के बीच मान दर्ज करें, जो इस मॉडल के लिए व्यावहारिक परिचालन सीमा है।',
     runAssessment: 'कमी मूल्यांकन चलाएं',
 
     // Screen 3 Report
@@ -189,10 +189,10 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
     excavatorsAvailable: 5,
     dumpTrucksOperational: 12,
     plannedOperatingHours: 18,
-    targetProductionTonnes: 12500,
+    targetProductionTonnes: 100,
     surfaceWaterPoolingPct: 5,
-    previousShiftProductionTonnes: 11800,
-    previousDayProductionTonnes: 23500,
+    previousShiftProductionTonnes: 85,
+    previousDayProductionTonnes: 170,
   });
 
   // No client-side fake report generator: with every required field now
@@ -537,6 +537,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                       type="number"
                       required
                       min={0}
+                      max={200}
                       value={inputs.previousShiftProductionTonnes}
                       onChange={(e) => setInputs({ ...inputs, previousShiftProductionTonnes: parseFloat(e.target.value) || 0 })}
                       className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
@@ -551,6 +552,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                       type="number"
                       required
                       min={0}
+                      max={600}
                       value={inputs.previousDayProductionTonnes}
                       onChange={(e) => setInputs({ ...inputs, previousDayProductionTonnes: parseFloat(e.target.value) || 0 })}
                       className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
@@ -570,7 +572,8 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                 <input
                   type="number"
                   required
-                  min={100}
+                  min={1}
+                  max={200}
                   value={inputs.targetProductionTonnes}
                   onChange={(e) => setInputs({ ...inputs, targetProductionTonnes: parseInt(e.target.value) || 0 })}
                   className="w-full max-w-xs px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"

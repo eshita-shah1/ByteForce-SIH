@@ -12,15 +12,15 @@ def _valid_request(**overrides) -> ShortfallRequest:
         "timestamp": "2026-09-08T10:00:00",
         "shift_type": "Shift_1_Morning",
         "pit_id": "BAL_NORTH_PIT",
-        "target_production_tonnes": 5000,
+        "target_production_tonnes": 100,
         "planned_operating_hours": 8,
         "surface_water_pooling_pct": 5,
         "excavators_available": 5,
         "dump_trucks_operational": 10,
         "workers_scheduled": 50,
         "workers_available": 48,
-        "previous_shift_production_tonnes": 4800,
-        "previous_day_production_tonnes": 9600,
+        "previous_shift_production_tonnes": 85,
+        "previous_day_production_tonnes": 170,
     }
     payload.update(overrides)
     return ShortfallRequest(**payload)
@@ -30,9 +30,9 @@ def _response_with_measures(*measures: CorrectiveMeasure) -> ShortfallResponse:
     return ShortfallResponse(
         pit_id="BAL_NORTH_PIT",
         shift_type="Shift_1_Morning",
-        target_production_tonnes=5000.0,
-        predicted_production_tonnes=4200.0,
-        shortfall_tonnes=800.0,
+        target_production_tonnes=100.0,
+        predicted_production_tonnes=84.0,
+        shortfall_tonnes=16.0,
         shortfall_percentage=16.0,
         risk="Critical",
         primary_causes=[m.factor for m in measures],

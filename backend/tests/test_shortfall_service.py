@@ -14,15 +14,15 @@ def _valid_payload(**overrides):
         "timestamp": "2026-09-08T10:00:00",
         "shift_type": "Shift_1_Morning",
         "pit_id": "BAL_NORTH_PIT",
-        "target_production_tonnes": 5000,
+        "target_production_tonnes": 100,
         "planned_operating_hours": 8,
         "surface_water_pooling_pct": 5,
         "excavators_available": 5,
         "dump_trucks_operational": 10,
         "workers_scheduled": 50,
         "workers_available": 48,
-        "previous_shift_production_tonnes": 4800,
-        "previous_day_production_tonnes": 9600,
+        "previous_shift_production_tonnes": 85,
+        "previous_day_production_tonnes": 170,
         # Supplied directly so resolve_environment_features() never needs to
         # reach the live weather API in a test.
         "rainfall_intensity_mm": 5.0,
@@ -79,10 +79,13 @@ async def test_predict_shortfall_end_to_end_with_real_model():
 
 @pytest.mark.asyncio
 async def test_predict_shortfall_flags_high_shortfall_as_critical():
-    """A tiny target relative to typical output should not itself change
-    behavior; this drives a large predicted-vs-target gap by setting an
-    unreasonably high target, which the real model cannot come close to,
-    to exercise the Critical branch end-to-end."""
+    """Drives a large predicted-vs-target gap by setting the maximum allowed
+    target (200 tonnes/shift - the schema now caps target_production_tonnes
+    at 200, see app/schemas/shortfall.py) against otherwise-modest inputs.
+    Empirically, the real model's output for inputs like these lands well
+    under 200 (see the black-box characterization used to derive the 1-200
+    range), so this reliably exercises the Critical branch end-to-end
+    without needing an out-of-range target."""
     from app.services.model2_service import model2_service
     from app.services.shortfall_service import predict_shortfall
 
@@ -94,7 +97,7 @@ async def test_predict_shortfall_flags_high_shortfall_as_critical():
     if not model2_service.is_loaded:
         pytest.skip("Model 2 failed to load in this environment.")
 
-    request = ShortfallRequest(**_valid_payload(target_production_tonnes=1_000_000))
+    request = ShortfallRequest(**_valid_payload(target_production_tonnes=200))
     response = await predict_shortfall(request, settings)
 
     assert response.shortfall_percentage >= 25
