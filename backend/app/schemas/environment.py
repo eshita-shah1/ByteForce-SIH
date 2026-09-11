@@ -7,7 +7,7 @@ POST /api/shortfall exactly as before.
 """
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class EnvironmentResponse(BaseModel):
@@ -20,5 +20,12 @@ class EnvironmentResponse(BaseModel):
     soil_moisture_index: float
     temperature_celsius: float
     surface_water_risk: str
-    observed_at: str
+    observed_at: str = Field(
+        ...,
+        description=(
+            "ISO-8601 timestamp WITH an explicit UTC offset (e.g. "
+            "'2026-09-11T23:00:00+05:30'), the pit-local time of the "
+            "underlying Open-Meteo hourly value - see weather_service.py."
+        ),
+    )
     source: str = "Open-Meteo"

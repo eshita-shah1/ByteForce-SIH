@@ -14,6 +14,7 @@ is unaffected.
 """
 from __future__ import annotations
 
+import datetime as dt
 import logging
 
 import httpx
@@ -24,10 +25,38 @@ from app.core.exceptions import ExternalApiError
 logger = logging.getLogger("app.weather")
 
 
+def _attach_utc_offset(naive_local_time: str, utc_offset_seconds: float | int | None) -> str:
+    """With timezone=auto, Open-Meteo resolves the IANA zone for the
+    requested lat/lon (e.g. "Asia/Kolkata") and returns every hourly.time
+    entry as a timezone-NAIVE local wall-clock string (no "Z", no UTC
+    offset) - e.g. "2026-09-11T23:00". A bare string like that is
+    genuinely ambiguous: parsed with a UTC offset attached, it's
+    unambiguous everywhere; parsed with none, a JS `new Date(...)` (or
+    Python datetime.fromisoformat) silently assumes the CALLER's own
+    local timezone, which is only coincidentally correct when the caller
+    happens to share the pit's offset. Attaching the offset Open-Meteo
+    itself already reports in the same response (`utc_offset_seconds` -
+    the resolved offset for that specific timestamp/zone, correct across
+    DST if the zone observes it) makes the value unambiguous for every
+    downstream consumer, without this codebase hardcoding any specific
+    timezone name."""
+    if not isinstance(utc_offset_seconds, (int, float)):
+        # Open-Meteo has always returned utc_offset_seconds with
+        # timezone=auto in practice; this is a defensive fallback, not
+        # the expected path - still better than crashing the request.
+        logger.warning("Open-Meteo response missing utc_offset_seconds; observed_at will be timezone-naive.")
+        return naive_local_time
+    tz = dt.timezone(dt.timedelta(seconds=utc_offset_seconds))
+    return dt.datetime.fromisoformat(naive_local_time).replace(tzinfo=tz).isoformat()
+
+
 async def fetch_live_environment(lat: float, lon: float, settings: Settings) -> dict:
     """Returns rainfall_intensity_mm, cumulative_rainfall_72h,
-    soil_moisture_index, temperature_celsius, and observed_at (the
-    timestamp of the latest hourly value used) for the given point."""
+    soil_moisture_index, temperature_celsius, and observed_at (an
+    ISO-8601 timestamp WITH an explicit UTC offset, e.g.
+    "2026-09-11T23:00:00+05:30" - the pit-local time of the latest hourly
+    value used, unambiguous regardless of the caller's own timezone) for
+    the given point."""
     params = {
         "latitude": lat,
         "longitude": lon,
@@ -72,7 +101,8 @@ async def fetch_live_environment(lat: float, lon: float, settings: Settings) -> 
         cumulative_rainfall_72h = float(sum(v for v in precipitation[-72:] if v is not None))
         soil_moisture_index = float(soil_moisture[-1])
         temperature_celsius = float(temperature[-1])
-        observed_at = str(times[-1])
+
+        observed_at = _attach_utc_offset(str(times[-1]), payload.get("utc_offset_seconds"))
     except (KeyError, IndexError, TypeError) as exc:
         raise ExternalApiError(
             "Live weather data response was malformed.",

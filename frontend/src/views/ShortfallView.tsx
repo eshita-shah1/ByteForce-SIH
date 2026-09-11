@@ -218,11 +218,28 @@ function toOperationalInputs(form: ShortfallFormInputs): ShortfallOperationalInp
   return form as ShortfallOperationalInputs;
 }
 
-// Formats the backend's real observation timestamp (Open-Meteo's local
-// hourly timestamp, passed through unmodified by weather_service.py) for
-// display. Falls back to the raw string rather than a fabricated time if
-// it's ever unparseable.
+// Formats the backend's real observation timestamp for display. The
+// backend (weather_service.py) sends an offset-aware ISO-8601 string,
+// e.g. "2026-09-11T23:00:00+05:30" - the pit's own local wall-clock time,
+// with Open-Meteo's own resolved UTC offset attached so the string is
+// unambiguous on its own.
+//
+// This deliberately does NOT go through `new Date(iso)` +
+// `toLocaleTimeString()`: that pair re-expresses the instant in the
+// BROWSER's timezone, which only coincidentally matches the pit's "23:00"
+// digits when the viewer's browser happens to share the pit's UTC offset
+// - a real bug for anyone viewing from a different timezone. The pit's
+// own observation hour is instead read directly off the string's local
+// time component, so it's correct regardless of the viewer's timezone.
+// No IANA zone name (e.g. "Asia/Kolkata") is hardcoded anywhere here -
+// the offset always comes from what the backend actually resolved for
+// the selected pit.
 function formatObservedAt(iso: string): string {
+  const match = iso.match(/T(\d{2}):(\d{2})/);
+  if (match) return `${match[1]}:${match[2]}`;
+
+  // Defensive fallback only - not the expected path given the backend
+  // contract above. Never silently show nothing.
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return iso;
   return parsed.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
