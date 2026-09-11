@@ -166,6 +166,48 @@ interface ShortfallViewProps {
   onSubBreadcrumbChange?: (crumb: string) => void;
 }
 
+// Same fields as ShortfallOperationalInputs, but each starts genuinely empty
+// (not a fabricated 0/demo value) until the user types something - a
+// controlled <input type="number"> renders '' as blank. Converted back to
+// ShortfallOperationalInputs (real numbers only) right before the API call.
+type ShortfallFormInputs = { [K in keyof ShortfallOperationalInputs]: number | '' };
+
+const EMPTY_OPERATIONAL_INPUTS: ShortfallFormInputs = {
+  workersAvailable: '',
+  workersScheduled: '',
+  excavatorsAvailable: '',
+  dumpTrucksOperational: '',
+  plannedOperatingHours: '',
+  targetProductionTonnes: '',
+  surfaceWaterPoolingPct: '',
+  previousShiftProductionTonnes: '',
+  previousDayProductionTonnes: '',
+};
+
+// '' stays '' (field left empty); anything else is parsed - an invalid/
+// unparseable number is also treated as empty rather than silently coerced
+// to 0, so clearing a field never reappears as a fake "0".
+const parseIntOrEmpty = (raw: string): number | '' => {
+  if (raw === '') return '';
+  const n = parseInt(raw, 10);
+  return Number.isNaN(n) ? '' : n;
+};
+
+const parseFloatOrEmpty = (raw: string): number | '' => {
+  if (raw === '') return '';
+  const n = parseFloat(raw);
+  return Number.isNaN(n) ? '' : n;
+};
+
+// True only once every operational field has a real user-entered number -
+// the guard the "Run assessment" submit checks before ever calling the API.
+function toOperationalInputs(form: ShortfallFormInputs): ShortfallOperationalInputs | null {
+  for (const value of Object.values(form)) {
+    if (value === '') return null;
+  }
+  return form as ShortfallOperationalInputs;
+}
+
 export const ShortfallView: React.FC<ShortfallViewProps> = ({ 
   initialReport,
   onSubBreadcrumbChange 
@@ -182,18 +224,10 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
   });
 
   // Operational inputs - exactly the fields backend/app/schemas/shortfall.py's
-  // ShortfallRequest actually requires (see types/index.ts).
-  const [inputs, setInputs] = useState<ShortfallOperationalInputs>({
-    workersAvailable: 34,
-    workersScheduled: 36,
-    excavatorsAvailable: 5,
-    dumpTrucksOperational: 12,
-    plannedOperatingHours: 18,
-    targetProductionTonnes: 100,
-    surfaceWaterPoolingPct: 5,
-    previousShiftProductionTonnes: 85,
-    previousDayProductionTonnes: 170,
-  });
+  // ShortfallRequest actually requires (see types/index.ts). Starts genuinely
+  // empty - no demo/dummy numbers - the user must enter every value before
+  // "Run shortfall assessment" is allowed to submit.
+  const [inputs, setInputs] = useState<ShortfallFormInputs>(EMPTY_OPERATIONAL_INPUTS);
 
   // No client-side fake report generator: with every required field now
   // genuinely collected, a failed call means something real went wrong -
@@ -216,10 +250,20 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
 
   const handleRunAssessment = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Backstop behind the inputs' own `required` HTML attributes (which
+    // already block the browser from submitting while any is empty): never
+    // send a request built from a partially-empty form.
+    const operationalInputs = toOperationalInputs(inputs);
+    if (!operationalInputs) {
+      setRunError('Please fill in all required operational fields before running the assessment.');
+      return;
+    }
+
     setIsEvaluating(true);
     setRunError(null);
 
-    const result = await api.runShortfallAssessment(site, inputs);
+    const result = await api.runShortfallAssessment(site, operationalInputs);
 
     setIsEvaluating(false);
     if (result.ok && result.data.report) {
@@ -434,7 +478,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                       required
                       min={1}
                       value={inputs.workersAvailable}
-                      onChange={(e) => setInputs({ ...inputs, workersAvailable: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => setInputs({ ...inputs, workersAvailable: parseIntOrEmpty(e.target.value) })}
                       className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
                     />
                   </div>
@@ -448,7 +492,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                       required
                       min={1}
                       value={inputs.workersScheduled}
-                      onChange={(e) => setInputs({ ...inputs, workersScheduled: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => setInputs({ ...inputs, workersScheduled: parseIntOrEmpty(e.target.value) })}
                       className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
                     />
                   </div>
@@ -470,7 +514,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                       required
                       min={0}
                       value={inputs.excavatorsAvailable}
-                      onChange={(e) => setInputs({ ...inputs, excavatorsAvailable: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => setInputs({ ...inputs, excavatorsAvailable: parseIntOrEmpty(e.target.value) })}
                       className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
                     />
                   </div>
@@ -484,7 +528,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                       required
                       min={0}
                       value={inputs.dumpTrucksOperational}
-                      onChange={(e) => setInputs({ ...inputs, dumpTrucksOperational: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => setInputs({ ...inputs, dumpTrucksOperational: parseIntOrEmpty(e.target.value) })}
                       className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
                     />
                   </div>
@@ -499,7 +543,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                       max={24}
                       required
                       value={inputs.plannedOperatingHours}
-                      onChange={(e) => setInputs({ ...inputs, plannedOperatingHours: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => setInputs({ ...inputs, plannedOperatingHours: parseIntOrEmpty(e.target.value) })}
                       className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
                     />
                     <span className="text-[10px] text-slate-400 mt-1 block">0–24</span>
@@ -524,7 +568,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                       min={0}
                       max={100}
                       value={inputs.surfaceWaterPoolingPct}
-                      onChange={(e) => setInputs({ ...inputs, surfaceWaterPoolingPct: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => setInputs({ ...inputs, surfaceWaterPoolingPct: parseFloatOrEmpty(e.target.value) })}
                       className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
                     />
                   </div>
@@ -539,7 +583,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                       min={0}
                       max={200}
                       value={inputs.previousShiftProductionTonnes}
-                      onChange={(e) => setInputs({ ...inputs, previousShiftProductionTonnes: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => setInputs({ ...inputs, previousShiftProductionTonnes: parseFloatOrEmpty(e.target.value) })}
                       className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
                     />
                   </div>
@@ -554,7 +598,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                       min={0}
                       max={600}
                       value={inputs.previousDayProductionTonnes}
-                      onChange={(e) => setInputs({ ...inputs, previousDayProductionTonnes: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => setInputs({ ...inputs, previousDayProductionTonnes: parseFloatOrEmpty(e.target.value) })}
                       className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
                     />
                   </div>
@@ -575,7 +619,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                   min={1}
                   max={200}
                   value={inputs.targetProductionTonnes}
-                  onChange={(e) => setInputs({ ...inputs, targetProductionTonnes: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => setInputs({ ...inputs, targetProductionTonnes: parseIntOrEmpty(e.target.value) })}
                   className="w-full max-w-xs px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
                 />
                 <span className="text-[10px] text-slate-400 mt-1 block">{st.tonnageHelp}</span>
