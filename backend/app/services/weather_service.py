@@ -2,10 +2,9 @@
 
 Only fetches the specific variables Module 2 actually needs
 (app.ml.model2.feature_schema.LIVE_SOURCEABLE_FEATURES): rainfall,
-cumulative 72h rainfall, soil moisture, and near-surface temperature (used
-as the best available proxy for land_surface_temperature_c - Open-Meteo has
-no true thermal-band land-surface-temperature product; this is documented,
-not silently substituted).
+cumulative 72h rainfall, and soil moisture. (v1 also fetched near-surface
+temperature as a land_surface_temperature_c proxy; the v2 model doesn't use
+that feature, so it's no longer fetched.)
 """
 from __future__ import annotations
 
@@ -21,11 +20,11 @@ logger = logging.getLogger("app.weather")
 
 async def fetch_live_environment(lat: float, lon: float, settings: Settings) -> dict:
     """Returns rainfall_intensity_mm, cumulative_rainfall_72h,
-    soil_moisture_index, land_surface_temperature_c for the given point."""
+    soil_moisture_index for the given point."""
     params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": "precipitation,soil_moisture_0_to_7cm,temperature_2m",
+        "hourly": "precipitation,soil_moisture_0_to_7cm",
         "past_days": 3,
         "forecast_days": 1,
         "timezone": "auto",
@@ -55,8 +54,7 @@ async def fetch_live_environment(lat: float, lon: float, settings: Settings) -> 
         hourly = payload["hourly"]
         precipitation = hourly["precipitation"]
         soil_moisture = hourly["soil_moisture_0_to_7cm"]
-        temperature = hourly["temperature_2m"]
-        if not precipitation or not soil_moisture or not temperature:
+        if not precipitation or not soil_moisture:
             raise KeyError("empty hourly series")
 
         # "current" rainfall intensity = most recent hourly value; 72h
@@ -64,7 +62,6 @@ async def fetch_live_environment(lat: float, lon: float, settings: Settings) -> 
         rainfall_intensity_mm = float(precipitation[-1])
         cumulative_rainfall_72h = float(sum(v for v in precipitation[-72:] if v is not None))
         soil_moisture_index = float(soil_moisture[-1])
-        land_surface_temperature_c = float(temperature[-1])
     except (KeyError, IndexError, TypeError) as exc:
         raise ExternalApiError(
             "Live weather data response was malformed.",
@@ -75,5 +72,4 @@ async def fetch_live_environment(lat: float, lon: float, settings: Settings) -> 
         "rainfall_intensity_mm": rainfall_intensity_mm,
         "cumulative_rainfall_72h": cumulative_rainfall_72h,
         "soil_moisture_index": soil_moisture_index,
-        "land_surface_temperature_c": land_surface_temperature_c,
     }

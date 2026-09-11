@@ -38,6 +38,21 @@ export interface ProspectivityResult {
   anomalyIndex: string;
 }
 
+// Matches backend/app/ml/model2/feature_schema.py CATEGORICAL_FEATURES exactly.
+export type PitId = 'BAL_DEEP_LEVEL_3' | 'BAL_NORTH_PIT' | 'BAL_SOUTH_PIT' | 'UKWA_EXTENSION';
+export type ShiftType = 'Shift_1_Morning' | 'Shift_2_Evening' | 'Shift_3_Night';
+
+// Model 2 v2: pit_id/shift_type identify the site - there is no lat/lng
+// concept for this model (see backend/app/ml/model2/feature_schema.py).
+export interface ShortfallSiteInfo {
+  pitId: PitId;
+  shiftType: ShiftType;
+}
+
+// Model 2 v2's actual required feature set (backend/app/schemas/shortfall.py
+// ShortfallRequest) - machineryAvailability and blastingRoundsPlanned were
+// v1-only fields the new model doesn't use, so they're gone rather than
+// kept around unused.
 export interface ShortfallOperationalInputs {
   // Workforce
   workersAvailable: number;
@@ -45,18 +60,13 @@ export interface ShortfallOperationalInputs {
   // Equipment
   excavatorsAvailable: number;
   dumpTrucksOperational: number;
-  machineryAvailability: number;
   plannedOperatingHours: number;
-  // Blasting
-  blastingRoundsPlanned?: number;
   // Tonnage
-  expectedTonnage: number;
-}
-
-export interface ShortfallCoordinates {
-  latitude: number;
-  longitude: number;
-  siteName: string;
+  targetProductionTonnes: number;
+  // Environmental / history (no live-source for these - always user input)
+  surfaceWaterPoolingPct: number;
+  previousShiftProductionTonnes: number;
+  previousDayProductionTonnes: number;
 }
 
 export interface ShortfallReportData {

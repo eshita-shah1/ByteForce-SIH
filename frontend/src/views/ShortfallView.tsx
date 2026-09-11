@@ -12,26 +12,23 @@ import {
   Layers
 } from 'lucide-react';
 import { api } from '../services/api';
-import { ShortfallCoordinates, ShortfallOperationalInputs, ShortfallReportData } from '../types';
+import { PitId, ShiftType, ShortfallOperationalInputs, ShortfallReportData, ShortfallSiteInfo } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { AnimatedNumber } from '../components/core/AnimatedNumber';
 
 const ST = {
   en: {
     initTitle: 'Initialize Shortfall Model',
-    initSubtitle: 'To estimate raw extraction limits and operational logistics bottlenecks, define your geological target coordinates.',
-    defineCoords: 'Define Project Coordinates',
-    latTarget: 'LATITUDE TARGET',
-    lngTarget: 'LONGITUDE TARGET',
-    deg: 'DEG',
-    siteNameLabel: 'SITE / PROJECT NAME (OPTIONAL)',
-    siteNamePlaceholder: 'e.g. Shatter Belt Block A',
+    initSubtitle: 'To estimate raw extraction limits and operational logistics bottlenecks, identify the pit and shift you are forecasting for.',
+    defineCoords: 'Identify Pit & Shift',
+    pitLabel: 'PIT',
+    shiftLabel: 'SHIFT',
     continueBtn: 'Continue to Operational Inputs',
     pendingTitle: 'Target Core Models Pending',
-    pendingDesc: 'Once location parameters are verified, the dashboard reveals environmental telemetry streams and live operational variables.',
+    pendingDesc: 'Once the pit and shift are selected, the dashboard reveals environmental telemetry streams and live operational variables.',
 
     // Screen 2
-    backBtn: '← Back to Coordinates',
+    backBtn: '← Back to Pit & Shift',
     envContext: 'Live Environmental Context',
     currentRainfall: 'CURRENT RAINFALL',
     rainfall72h: 'RAINFALL (72H)',
@@ -47,13 +44,13 @@ const ST = {
     equipment: 'EQUIPMENT',
     excavatorsAvailable: 'Excavators Available (units)',
     dumpTrucksOperational: 'Dump Trucks Operational (units)',
-    machineryAvailability: 'Machinery Availability (%)',
     plannedHours: 'Planned Operating Hours (hrs)',
-    blasting: 'BLASTING',
-    blastingRounds: 'Blasting Rounds Planned (rounds)',
-    optional: 'Optional',
+    environmentalHistory: 'ENVIRONMENTAL & PRODUCTION HISTORY',
+    surfaceWaterPoolingPct: 'Surface Water Pooling (%)',
+    previousShiftProduction: 'Previous Shift Production (tonnes)',
+    previousDayProduction: 'Previous Day Production (tonnes)',
     tonnage: 'TONNAGE',
-    expectedTonnage: 'Expected Tonnage (tonnes)',
+    expectedTonnage: 'Target Production Tonnes',
     tonnageHelp: 'Target production for this shift or period.',
     runAssessment: 'Run shortfall assessment',
 
@@ -93,19 +90,16 @@ const ST = {
   },
   hi: {
     initTitle: 'कमी मॉडल प्रारंभ करें',
-    initSubtitle: 'कच्ची निष्कर्षण सीमाओं और परिचालन रसद अड़चनों का अनुमान लगाने के लिए अपने भूवैज्ञानिक लक्ष्य निर्देशांक परिभाषित करें।',
-    defineCoords: 'परियोजना निर्देशांक परिभाषित करें',
-    latTarget: 'अक्षांश लक्ष्य',
-    lngTarget: 'देशांतर लक्ष्य',
-    deg: 'डिग्री',
-    siteNameLabel: 'साइट / परियोजना का नाम (वैकल्पिक)',
-    siteNamePlaceholder: 'उदा. शैटर बेल्ट ब्लॉक ए',
+    initSubtitle: 'कच्ची निष्कर्षण सीमाओं और परिचालन रसद अड़चनों का अनुमान लगाने के लिए वह खदान और शिफ्ट चुनें जिसके लिए आप पूर्वानुमान लगा रहे हैं।',
+    defineCoords: 'खदान और शिफ्ट चुनें',
+    pitLabel: 'खदान',
+    shiftLabel: 'शिफ्ट',
     continueBtn: 'परिचालन इनपुट पर जारी रखें',
     pendingTitle: 'लक्ष्य कोर मॉडल लंबित',
-    pendingDesc: 'स्थान पैरामीटर सत्यापित होने के बाद, डैशबोर्ड पर्यावरणीय टेलीमेट्री स्ट्रीम और लाइव परिचालन चर प्रदर्शित करता है।',
+    pendingDesc: 'खदान और शिफ्ट चुने जाने के बाद, डैशबोर्ड पर्यावरणीय टेलीमेट्री स्ट्रीम और लाइव परिचालन चर प्रदर्शित करता है।',
 
     // Screen 2
-    backBtn: '← निर्देशांक पर वापस जाएं',
+    backBtn: '← खदान और शिफ्ट पर वापस जाएं',
     envContext: 'लाइव पर्यावरण संदर्भ',
     currentRainfall: 'वर्तमान वर्षा',
     rainfall72h: 'वर्षा (72 घंटे)',
@@ -121,13 +115,13 @@ const ST = {
     equipment: 'उपकरण',
     excavatorsAvailable: 'उपलब्ध उत्खनक (इकाइयां)',
     dumpTrucksOperational: 'परिचालन डंप ट्रक (इकाइयां)',
-    machineryAvailability: 'मशीनरी उपलब्धता (%)',
     plannedHours: 'नियोजित परिचालन घंटे (घंटे)',
-    blasting: 'ब्लास्टिंग',
-    blastingRounds: 'नियोजित ब्लास्टिंग राउंड (राउंड)',
-    optional: 'वैकल्पिक',
+    environmentalHistory: 'पर्यावरणीय और उत्पादन इतिहास',
+    surfaceWaterPoolingPct: 'सतही जल जमाव (%)',
+    previousShiftProduction: 'पिछली शिफ्ट उत्पादन (टन)',
+    previousDayProduction: 'पिछले दिन का उत्पादन (टन)',
     tonnage: 'टन भार',
-    expectedTonnage: 'अपेक्षित टन भार (टन)',
+    expectedTonnage: 'लक्षित उत्पादन टन भार',
     tonnageHelp: 'इस शिफ्ट या अवधि के लिए लक्षित उत्पादन।',
     runAssessment: 'कमी मूल्यांकन चलाएं',
 
@@ -181,96 +175,32 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
   // Step in workflow: 1 = coordinates, 2 = operational inputs, 3 = report
   const [step, setStep] = useState<'coords' | 'inputs' | 'report'>(initialReport ? 'report' : 'coords');
 
-  // Coordinates
-  const [coords, setCoords] = useState<ShortfallCoordinates>({
-    latitude: -22.842778,
-    longitude: 115.319444,
-    siteName: 'Shatter Belt Block A'
+  // Pit + shift identify the site - this model has no lat/lng concept.
+  const [site, setSite] = useState<ShortfallSiteInfo>({
+    pitId: 'BAL_NORTH_PIT',
+    shiftType: 'Shift_1_Morning',
   });
 
-  // Operational inputs
+  // Operational inputs - exactly the fields backend/app/schemas/shortfall.py's
+  // ShortfallRequest actually requires (see types/index.ts).
   const [inputs, setInputs] = useState<ShortfallOperationalInputs>({
     workersAvailable: 34,
     workersScheduled: 36,
     excavatorsAvailable: 5,
     dumpTrucksOperational: 12,
-    machineryAvailability: 88,
     plannedOperatingHours: 18,
-    blastingRoundsPlanned: 2,
-    expectedTonnage: 12500
+    targetProductionTonnes: 12500,
+    surfaceWaterPoolingPct: 5,
+    previousShiftProductionTonnes: 11800,
+    previousDayProductionTonnes: 23500,
   });
 
-  const createDefaultShortfallReport = (c: ShortfallCoordinates, i: ShortfallOperationalInputs): ShortfallReportData => {
-    const targetTonnes = Number(i.expectedTonnage) || 12500;
-    const hours = Number(i.plannedOperatingHours) || 18;
-    const trucks = Number(i.dumpTrucksOperational) || 12;
-    const predictedTonnes = Math.round(targetTonnes * (0.65 + (trucks / 16) * 0.15 + (hours / 24) * 0.15));
-    const gapTonnes = predictedTonnes - targetTonnes;
-    const shortfallPct = Math.max(5, Math.round(Math.abs(gapTonnes / targetTonnes) * 100));
-
-    return {
-      id: `rep-${Date.now()}`,
-      siteName: c.siteName || 'Balaghat Pit Sector',
-      coordinates: { lat: c.latitude, lng: c.longitude },
-      computedAgo: 'Just now',
-      timestamp: new Date().toLocaleDateString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      expectedShortfallPercent: shortfallPct,
-      riskLevel: shortfallPct > 25 ? 'HIGH RISK' : shortfallPct > 15 ? 'MODERATE RISK' : 'LOW',
-      targetProductionTonnes: targetTonnes,
-      predictedOutputTonnes: predictedTonnes,
-      expectedGapTonnes: gapTonnes,
-      environmental: {
-        weatherTemp: '34°C · Rain Storm Risk 80%',
-        stormRisk: 'High local lightning activity expected',
-        lightningRisk: 'High local lightning activity expected',
-        waterTableDepth: 'Water Table: High Risk (-2.4m)',
-        waterTableRisk: 'Quarry sump pumping active',
-        haulRoadStatus: 'Haulage Road Status: Damp',
-        haulRoadSlippage: 'Grade 3 minor slippage advisory'
-      },
-      submittedParameters: {
-        targetSite: c.siteName || 'Balaghat Pit Sector',
-        targetExtraction: `${targetTonnes.toLocaleString()} tonnes`,
-        shiftCrewsActive: `${Math.round(i.workersAvailable / 8)} teams`,
-        haulageFleet: `${trucks}x CAT 777`,
-        blastingScheduled: i.blastingRoundsPlanned ? `Yes (${i.blastingRoundsPlanned} rounds)` : 'None',
-        geologicalProfile: 'High Grade Manganese'
-      },
-      contributingFactors: [
-        {
-          name: 'Haulage Ramp Slippage & Gradient',
-          description: 'Wet gradient decreases safe truck speeds down the extraction route.',
-          impactPercent: Math.round(shortfallPct * 0.45)
-        },
-        {
-          name: 'Drill Rig Sump Water Infiltration',
-          description: 'Sump pumping must execute 30 min before active core drills can begin bench work.',
-          impactPercent: Math.round(shortfallPct * 0.25)
-        },
-        {
-          name: 'Workforce Shift Handover Latency',
-          description: 'Predicted 15-minute alignment gap during upcoming scheduled shift change.',
-          impactPercent: Math.round(shortfallPct * 0.18)
-        },
-        {
-          name: 'Secondary Bench Ramp Congestion',
-          description: 'Auxiliary loader queue times increased along the northern switchback access.',
-          impactPercent: Math.max(1, shortfallPct - Math.round(shortfallPct * 0.45) - Math.round(shortfallPct * 0.25) - Math.round(shortfallPct * 0.18))
-        }
-      ],
-      correctiveMeasures: [
-        'Quarry Sump Dewatering: Increase submersible pump discharge rate at Target Sump A 45 minutes prior to shift handover.',
-        'Dynamic Haulage Re-Routing: Re-route 2x backup CAT 777 dump trucks to western bypass ramp to circumvent grade 3 slippage zone.',
-        'Stockpile Blending Protocol: Blend direct-run bench 4 material with dry strategic stockpile to stabilize moisture under 6.5%.',
-        'Ramp Surface Maintenance: Deploy auxiliary motor grader to apply crushed gravel topping across the northern switchback.'
-      ]
-    };
-  };
-
-  const [report, setReport] = useState<ShortfallReportData>(
-    initialReport || createDefaultShortfallReport(coords, inputs)
-  );
+  // No client-side fake report generator: with every required field now
+  // genuinely collected, a failed call means something real went wrong -
+  // that should surface as an error, not a silently fabricated forecast.
+  const [report, setReport] = useState<ShortfallReportData | null>(initialReport ?? null);
   const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
+  const [runError, setRunError] = useState<string | null>(null);
 
   const formatCoords = (lat: number, lng: number) => {
     const latDir = lat >= 0 ? 'N' : 'S';
@@ -284,20 +214,21 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
     if (onSubBreadcrumbChange) onSubBreadcrumbChange('Operational Inputs');
   };
 
-  const handleRunAssessment = (e: React.FormEvent) => {
+  const handleRunAssessment = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsEvaluating(true);
+    setRunError(null);
 
-    setTimeout(async () => {
-      setIsEvaluating(false);
-      // Attempt backend API call first with graceful calculation fallback
-      const apiResult = await api.runShortfallAssessment(coords, inputs);
-      const generatedReport = apiResult || createDefaultShortfallReport(coords, inputs);
+    const result = await api.runShortfallAssessment(site, inputs);
 
-      setReport(generatedReport);
+    setIsEvaluating(false);
+    if (result.ok && result.data.report) {
+      setReport(result.data.report);
       setStep('report');
       if (onSubBreadcrumbChange) onSubBreadcrumbChange('Model Prediction Report');
-    }, 650);
+    } else {
+      setRunError(result.ok ? 'The backend did not return a report for this prediction.' : result.message);
+    }
   };
 
   const handleExportPDF = () => {
@@ -333,53 +264,35 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
 
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    {st.latTarget}
+                    {st.pitLabel}
                   </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="any"
-                      required
-                      value={coords.latitude}
-                      onChange={(e) => setCoords({ ...coords, latitude: parseFloat(e.target.value) })}
-                      className="w-full px-3.5 py-2.5 text-xs font-mono rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
-                    />
-                    <span className="absolute right-3.5 top-2.5 text-[11px] font-mono text-slate-400">
-                      {st.deg}
-                    </span>
-                  </div>
+                  <select
+                    required
+                    value={site.pitId}
+                    onChange={(e) => setSite({ ...site, pitId: e.target.value as PitId })}
+                    className="w-full px-3.5 py-2.5 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none bg-white"
+                  >
+                    <option value="BAL_DEEP_LEVEL_3">BAL Deep Level 3</option>
+                    <option value="BAL_NORTH_PIT">BAL North Pit</option>
+                    <option value="BAL_SOUTH_PIT">BAL South Pit</option>
+                    <option value="UKWA_EXTENSION">UKWA Extension</option>
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    {st.lngTarget}
+                    {st.shiftLabel}
                   </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="any"
-                      required
-                      value={coords.longitude}
-                      onChange={(e) => setCoords({ ...coords, longitude: parseFloat(e.target.value) })}
-                      className="w-full px-3.5 py-2.5 text-xs font-mono rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
-                    />
-                    <span className="absolute right-3.5 top-2.5 text-[11px] font-mono text-slate-400">
-                      {st.deg}
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    {st.siteNameLabel}
-                  </label>
-                  <input
-                    type="text"
-                    value={coords.siteName}
-                    onChange={(e) => setCoords({ ...coords, siteName: e.target.value })}
-                    placeholder={st.siteNamePlaceholder}
-                    className="w-full px-3.5 py-2.5 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
-                  />
+                  <select
+                    required
+                    value={site.shiftType}
+                    onChange={(e) => setSite({ ...site, shiftType: e.target.value as ShiftType })}
+                    className="w-full px-3.5 py-2.5 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none bg-white"
+                  >
+                    <option value="Shift_1_Morning">Shift 1 — Morning</option>
+                    <option value="Shift_2_Evening">Shift 2 — Evening</option>
+                    <option value="Shift_3_Night">Shift 3 — Night</option>
+                  </select>
                 </div>
 
                 <div className="pt-2">
@@ -578,22 +491,6 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
 
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">
-                      {st.machineryAvailability}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      required
-                      value={inputs.machineryAvailability}
-                      onChange={(e) => setInputs({ ...inputs, machineryAvailability: parseInt(e.target.value) || 0 })}
-                      className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
-                    />
-                    <span className="text-[10px] text-slate-400 mt-1 block">0–100</span>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
                       {st.plannedHours}
                     </label>
                     <input
@@ -610,47 +507,83 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                 </div>
               </div>
 
-              {/* 3. BLASTING & TONNAGE SECTION */}
+              {/* 3. ENVIRONMENTAL & PRODUCTION HISTORY SECTION - no live source
+                  for these, so real user inputs (not fabricated defaults) */}
               <div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
-                  {/* Blasting column */}
+                <h3 className="text-xs font-bold text-slate-900 mb-3 tracking-wide">
+                  {st.environmentalHistory}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div>
-                    <h3 className="text-xs font-bold text-slate-900 mb-3 tracking-wide">
-                      {st.blasting}
-                    </h3>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
-                      {st.blastingRounds}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={inputs.blastingRoundsPlanned ?? ''}
-                      onChange={(e) => setInputs({ ...inputs, blastingRoundsPlanned: parseInt(e.target.value) || undefined })}
-                      className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
-                    />
-                    <span className="text-[10px] text-slate-400 mt-1 block">{st.optional}</span>
-                  </div>
-
-                  {/* Tonnage column */}
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-900 mb-3 tracking-wide">
-                      {st.tonnage}
-                    </h3>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
-                      {st.expectedTonnage}
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                      {st.surfaceWaterPoolingPct}
                     </label>
                     <input
                       type="number"
                       required
-                      min={100}
-                      value={inputs.expectedTonnage}
-                      onChange={(e) => setInputs({ ...inputs, expectedTonnage: parseInt(e.target.value) || 0 })}
+                      min={0}
+                      max={100}
+                      value={inputs.surfaceWaterPoolingPct}
+                      onChange={(e) => setInputs({ ...inputs, surfaceWaterPoolingPct: parseFloat(e.target.value) || 0 })}
                       className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
                     />
-                    <span className="text-[10px] text-slate-400 mt-1 block">{st.tonnageHelp}</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                      {st.previousShiftProduction}
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      value={inputs.previousShiftProductionTonnes}
+                      onChange={(e) => setInputs({ ...inputs, previousShiftProductionTonnes: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                      {st.previousDayProduction}
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      value={inputs.previousDayProductionTonnes}
+                      onChange={(e) => setInputs({ ...inputs, previousDayProductionTonnes: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
+                    />
                   </div>
                 </div>
               </div>
+
+              {/* 4. TONNAGE SECTION */}
+              <div>
+                <h3 className="text-xs font-bold text-slate-900 mb-3 tracking-wide">
+                  {st.tonnage}
+                </h3>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  {st.expectedTonnage}
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={100}
+                  value={inputs.targetProductionTonnes}
+                  onChange={(e) => setInputs({ ...inputs, targetProductionTonnes: parseInt(e.target.value) || 0 })}
+                  className="w-full max-w-xs px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">{st.tonnageHelp}</span>
+              </div>
+
+              {runError && (
+                <div className="p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs text-red-700">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
+                  <span>{runError}</span>
+                </div>
+              )}
 
               {/* Action Button */}
               <div className="pt-4 border-t border-slate-100">
@@ -672,7 +605,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
       )}
 
       {/* SCREEN 3: SHORTFALL PREDICTION REPORT */}
-      {step === 'report' && (
+      {step === 'report' && report && (
         <div id="printable-report" className="space-y-6 print:space-y-3 print:w-full">
           {/* Print-only professional header branding */}
           <div className="hidden print:flex items-center justify-between pb-2 mb-2 border-b border-slate-300">
@@ -697,7 +630,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                 {st.reportTitle}
               </h1>
               <p className="mt-1 text-xs text-slate-500">
-                {st.location}: <strong className="text-slate-700">{report.siteName}</strong> · {st.target}: ({formatCoords(report.coordinates?.lat ?? coords.latitude, report.coordinates?.lng ?? coords.longitude)}) · {st.computed} {report.computedAgo || 'Just now'}
+                {st.location}: <strong className="text-slate-700">{report.siteName}</strong> · {st.target}: ({formatCoords(report.coordinates.lat, report.coordinates.lng)}) · {st.computed} {report.computedAgo || 'Just now'}
               </p>
             </div>
 
@@ -832,7 +765,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
               <div className="p-3 print:p-2 bg-slate-50/70 rounded-lg border border-slate-100 print:border-slate-200">
                 <span className="text-slate-400 block text-[11px]">{st.targetCoordinates}</span>
                 <span className="font-semibold text-slate-800 font-mono text-xs mt-0.5 block">
-                  {formatCoords(report.coordinates?.lat ?? coords.latitude, report.coordinates?.lng ?? coords.longitude)}
+                  {formatCoords(report.coordinates.lat, report.coordinates.lng)}
                 </span>
               </div>
               <div className="p-3 print:p-2 bg-slate-50/70 rounded-lg border border-slate-100 print:border-slate-200">

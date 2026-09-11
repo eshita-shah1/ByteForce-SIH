@@ -15,27 +15,10 @@ def _valid_request(**overrides) -> ShortfallRequest:
         "target_production_tonnes": 5000,
         "planned_operating_hours": 8,
         "surface_water_pooling_pct": 5,
-        "pit_productivity_factor": 1.0,
-        "fleet_health_score": 0.9,
-        "excavators_scheduled": 5,
         "excavators_available": 5,
-        "excavator_downtime_hours": 0,
-        "equipment_maintenance_hours": 1,
-        "dump_trucks_assigned": 10,
         "dump_trucks_operational": 10,
-        "dumper_cycle_time_minutes": 12,
         "workers_scheduled": 50,
         "workers_available": 48,
-        "worker_availability_pct": 96,
-        "blasting_scheduled_flag": 1,
-        "blasting_delay_hours": 0,
-        "muckpile_volume_available": 1000,
-        "blast_fragmentation_index": 0.5,
-        "haul_road_condition_index": 4,
-        "rock_hardness_ucs": 90,
-        "stripping_ratio_current": 2.5,
-        "ore_grade_expected_pct": 30,
-        "operational_shock_flag": 0,
         "previous_shift_production_tonnes": 4800,
         "previous_day_production_tonnes": 9600,
     }
@@ -85,9 +68,9 @@ def test_risk_level_mapping_is_deterministic():
 def test_contributing_factor_weights_sum_to_100_percent():
     request = _valid_request()
     response = _response_with_measures(
-        CorrectiveMeasure(factor="excavator_downtime", severity="high", action="a", reason="r1"),
+        CorrectiveMeasure(factor="worker_availability", severity="high", action="a", reason="r1"),
         CorrectiveMeasure(factor="rainfall", severity="medium", action="b", reason="r2"),
-        CorrectiveMeasure(factor="rock_hardness", severity="low", action="c", reason="r3"),
+        CorrectiveMeasure(factor="none", severity="low", action="c", reason="r3"),
     )
 
     report = build_shortfall_report(request, response)
@@ -96,7 +79,7 @@ def test_contributing_factor_weights_sum_to_100_percent():
     assert sum(f.impact_percent for f in report.contributing_factors) == 100
     # high severity gets more weight than low severity
     weights = {f.name: f.impact_percent for f in report.contributing_factors}
-    assert weights["Excavator Downtime"] > weights["Rock Hardness"]
+    assert weights["Worker Availability"] > weights["None"]
 
 
 def test_unmodeled_fields_are_honestly_labeled_not_fabricated():
@@ -110,6 +93,11 @@ def test_unmodeled_fields_are_honestly_labeled_not_fabricated():
     assert "not modeled" in report.environmental.lightning_risk.lower()
     assert "not modeled" in report.environmental.water_table_risk.lower()
     assert "not assessed" in report.submitted_parameters.geological_profile.lower()
+    # v2 model dropped haul-road and blasting features entirely - must be
+    # honestly labeled, not silently left showing stale/fabricated content.
+    assert "not modeled" in report.environmental.haul_road_status.lower()
+    assert "not modeled" in report.environmental.haul_road_slippage.lower()
+    assert "not modeled" in report.submitted_parameters.blasting_scheduled.lower()
 
 
 def test_corrective_measures_are_passed_through_verbatim():

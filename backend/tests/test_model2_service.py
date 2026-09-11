@@ -44,7 +44,7 @@ def test_model2_predict_raises_on_missing_feature(loaded_service):
     from app.core.exceptions import InferenceError
 
     incomplete = _dummy_input()
-    del incomplete["worker_availability_pct"]
+    del incomplete["target_production_tonnes"]
     with pytest.raises(InferenceError):
         loaded_service.predict(incomplete)
 

@@ -1,8 +1,8 @@
-"""Module 2 request/response schemas.
+"""Module 2 request/response schemas (v2 model - see
+app.ml.model2.feature_schema for the artifact-replacement history).
 
 Field names and required-ness mirror the verified pipeline input contract in
-app.ml.model2.feature_schema (NOT the mismatched reference main.py that was
-shipped alongside the model files - see that module's docstring).
+app.ml.model2.feature_schema.
 """
 from __future__ import annotations
 
@@ -26,31 +26,13 @@ class ShortfallRequest(BaseModel):
     rainfall_intensity_mm: float | None = Field(default=None, ge=0)
     cumulative_rainfall_72h: float | None = Field(default=None, ge=0)
     soil_moisture_index: float | None = Field(default=None, ge=0)
-    land_surface_temperature_c: float | None = None
     surface_water_pooling_pct: float = Field(..., ge=0, le=100)
 
     # --- operational ---
-    pit_productivity_factor: float
-    fleet_health_score: float = Field(..., ge=0, le=1)
-    excavators_scheduled: int = Field(..., ge=0)
     excavators_available: int = Field(..., ge=0)
-    excavator_downtime_hours: float = Field(..., ge=0)
-    equipment_maintenance_hours: float = Field(..., ge=0)
-    dump_trucks_assigned: int = Field(..., ge=0)
     dump_trucks_operational: int = Field(..., ge=0)
-    dumper_cycle_time_minutes: float = Field(..., ge=0)
     workers_scheduled: int = Field(..., ge=0)
     workers_available: int = Field(..., ge=0)
-    worker_availability_pct: float = Field(..., ge=0, le=100)
-    blasting_scheduled_flag: int = Field(..., ge=0, le=1)
-    blasting_delay_hours: float = Field(..., ge=0)
-    muckpile_volume_available: float = Field(..., ge=0)
-    blast_fragmentation_index: float = Field(..., ge=0)
-    haul_road_condition_index: float = Field(..., ge=0)
-    rock_hardness_ucs: float = Field(..., ge=0)
-    stripping_ratio_current: float = Field(..., ge=0)
-    ore_grade_expected_pct: float = Field(..., ge=0, le=100)
-    operational_shock_flag: int = Field(..., ge=0, le=1)
     previous_shift_production_tonnes: float = Field(..., ge=0)
     previous_day_production_tonnes: float = Field(..., ge=0)
 

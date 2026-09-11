@@ -1,4 +1,4 @@
-import { GISFileItem, RunLog, ShortfallCoordinates, ShortfallOperationalInputs, ShortfallReportData, User } from '../types';
+import { GISFileItem, RunLog, ShortfallOperationalInputs, ShortfallReportData, ShortfallSiteInfo, User } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -79,6 +79,26 @@ export interface UploadStatusApiResponse {
 
 export type UploadCreateResult =
   | { ok: true; data: UploadCreateApiResponse }
+  | { ok: false; message: string };
+
+/** Mirrors backend app/schemas/shortfall.py's ShortfallResponse exactly (v2 model). */
+export interface ShortfallApiResponse {
+  success: boolean;
+  pit_id: string;
+  shift_type: string;
+  target_production_tonnes: number;
+  predicted_production_tonnes: number;
+  shortfall_tonnes: number;
+  shortfall_percentage: number;
+  risk: 'Normal' | 'Alert' | 'Critical';
+  primary_causes: string[];
+  corrective_measures: Array<{ factor: string; severity: string; action: string; reason: string }>;
+  feature_sources: Record<string, string>;
+  report: ShortfallReportData | null;
+}
+
+export type ShortfallApiResult =
+  | { ok: true; data: ShortfallApiResponse }
   | { ok: false; message: string };
 
 export type UploadStatusResult =
@@ -185,61 +205,49 @@ export const api = {
   },
 
   /**
-   * Run Shortfall Forecaster Model via backend (POST /api/shortfall).
-   *
-   * IMPORTANT LIMITATION: the backend's ShortfallRequest requires ~30
-   * operational fields (pit_id, shift_type, rock_hardness_ucs,
-   * ore_grade_expected_pct, previous_shift_production_tonnes, ...); this
-   * view only collects 8. Only the fields below have a real value to send -
-   * the rest are genuinely not collected anywhere in this UI, so they are
-   * left out rather than filled with invented numbers. That means this call
-   * will currently fail validation (422) until the form collects the rest,
-   * and the caller's existing client-side fallback (createDefaultShortfallReport
-   * in ShortfallView) will keep being used - same visible behavior as
-   * before, now for an honest, diagnosable reason instead of a wrong URL.
+   * Run Shortfall Forecaster Model via backend (POST /api/shortfall) - v2
+   * model. Every field the backend actually requires is now collected by
+   * ShortfallView, so this sends the real, complete request (no fields left
+   * out, none invented). rainfall_intensity_mm/cumulative_rainfall_72h/
+   * soil_moisture_index are intentionally omitted - the backend auto-fetches
+   * them from the live weather API when not supplied.
    */
   async runShortfallAssessment(
-    // Unused for now: the backend has no lat/lng concept for shortfall runs
-    // (it predicts per pit_id, not per coordinate) - kept in the signature
-    // since ShortfallView still collects and passes it.
-    _coords: ShortfallCoordinates,
+    site: ShortfallSiteInfo,
     inputs: ShortfallOperationalInputs
-  ): Promise<ShortfallReportData | null> {
+  ): Promise<ShortfallApiResult> {
+    let res: Response;
     try {
       const payload = {
         timestamp: new Date().toISOString(),
-        target_production_tonnes: inputs.expectedTonnage,
+        pit_id: site.pitId,
+        shift_type: site.shiftType,
+        target_production_tonnes: inputs.targetProductionTonnes,
         planned_operating_hours: inputs.plannedOperatingHours,
         workers_scheduled: inputs.workersScheduled,
         workers_available: inputs.workersAvailable,
-        worker_availability_pct: inputs.workersScheduled > 0 ? (inputs.workersAvailable / inputs.workersScheduled) * 100 : 0,
         excavators_available: inputs.excavatorsAvailable,
         dump_trucks_operational: inputs.dumpTrucksOperational,
-        blasting_scheduled_flag: inputs.blastingRoundsPlanned ? 1 : 0,
-        // Not collected by this UI, no value to send: shift_type, pit_id,
-        // surface_water_pooling_pct, pit_productivity_factor,
-        // fleet_health_score, excavators_scheduled, excavator_downtime_hours,
-        // equipment_maintenance_hours, dump_trucks_assigned,
-        // dumper_cycle_time_minutes, blasting_delay_hours,
-        // muckpile_volume_available, blast_fragmentation_index,
-        // haul_road_condition_index, rock_hardness_ucs,
-        // stripping_ratio_current, ore_grade_expected_pct,
-        // operational_shock_flag, previous_shift_production_tonnes,
-        // previous_day_production_tonnes.
+        surface_water_pooling_pct: inputs.surfaceWaterPoolingPct,
+        previous_shift_production_tonnes: inputs.previousShiftProductionTonnes,
+        previous_day_production_tonnes: inputs.previousDayProductionTonnes,
       };
 
-      const res = await fetch(`${API_BASE_URL}/shortfall`, {
+      res = await fetch(`${API_BASE_URL}/shortfall`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error('Shortfall model assessment failed');
-      const data = await res.json();
-      return data.report ?? null;
     } catch (err) {
-      console.warn('Backend shortfall endpoint unreachable or rejected the request, using client-side calculation fallback:', err);
-      return null;
+      console.error('Backend shortfall endpoint unreachable:', err);
+      return { ok: false, message: 'Unable to reach the server. Please try again.' };
     }
+
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { ok: false, message: body?.message || `Server error (${res.status}). Please try again.` };
+    }
+    return { ok: true, data: body as ShortfallApiResponse };
   },
 
   /**

@@ -38,25 +38,41 @@ Nothing here was guessed. Every artifact was unpickled and inspected directly
   on real rows (note: this includes rows the model was trained on — it is a
   wiring sanity check, not a held-out accuracy metric).
 
-**Module 2** (`models/MOIL_Module2_Final_Model.pkl` / `moil_production_pipeline.pkl`):
-- Both files hold a **structurally identical** fitted sklearn `Pipeline`
-  (`preprocessor` ColumnTransformer + `model` `XGBRegressor`). The `Final_Model`
-  file wraps it in `{"pipeline", "model_type": "XGBoost Regressor", "target":
-  "actual_production_tonnes", "module", "version": "1.0"}`; the app prefers
-  that one and falls back to the bare pipeline file.
-- **34 raw input columns**: `shift_type` (3 categories), `pit_id` (4
-  categories), 30 numeric operational/environmental fields, plus `month` and
-  `day_of_week` **engineered server-side from a `timestamp` field** (exactly
-  as the reference script does it).
-- `n_features_in_ == 37` after one-hot expansion (3 + 4 + 30).
-- **A reference `main.py` was shipped alongside these two files, but its
-  Pydantic model does NOT match the pipeline's real column names**
-  (`excavators_downtime_hours` vs. the pipeline's `excavator_downtime_hours`;
-  `maintenance_hours` vs. `equipment_maintenance_hours`; and it's missing
-  `workers_scheduled`/`workers_available` entirely). This backend's
-  `ShortfallRequest` schema (`app/schemas/shortfall.py`) uses the verified
-  pipeline column names, confirmed by an actual `pipeline.predict()` call —
-  not the reference script.
+**Module 2** (`models/MOIL_Module2_Final_Model.pkl` / `moil_production_pipeline.pkl`) — **v2 artifact**:
+- The original v1 artifact is preserved at
+  `models/backup_v1_shortfall_model/` (not loaded by the app). It was
+  replaced because the v1 feature set included several fields with an
+  unresolved leakage risk (`operational_shock_flag` alone accounted for
+  82.5% of v1's feature importance, with no way to confirm whether it was
+  known before or after the shift it was "predicting").
+- The v2 artifact is a **bare `sklearn.Pipeline`** (`preprocessor`
+  ColumnTransformer + `model` `XGBRegressor`) with no metadata dict — unlike
+  v1, it carries no embedded `target`/`model_type` strings. Its target
+  column name (`actual_production_tonnes`, same as v1) was confirmed by the
+  artifact's author, not read from the pickle.
+- **16 raw input columns**: `pit_id` (4 categories), `shift_type` (3
+  categories), 12 numeric operational/environmental fields, plus `month`
+  and `day_of_week` engineered server-side from a `timestamp` field (same
+  convention as v1). `n_features_in_ == 21` after one-hot expansion (4 + 3 + 14).
+- v1 → v2 dropped 17 fields with no replacement invented for them:
+  `land_surface_temperature_c`, `pit_productivity_factor`,
+  `fleet_health_score`, `excavators_scheduled`, `excavator_downtime_hours`,
+  `equipment_maintenance_hours`, `dump_trucks_assigned`,
+  `dumper_cycle_time_minutes`, `worker_availability_pct`,
+  `blasting_scheduled_flag`, `blasting_delay_hours`,
+  `muckpile_volume_available`, `blast_fragmentation_index`,
+  `haul_road_condition_index`, `rock_hardness_ucs`,
+  `stripping_ratio_current`, `ore_grade_expected_pct`,
+  `operational_shock_flag`.
+- Risk thresholds changed with the artifact swap: `<10%` Normal, `10–<25%`
+  Alert, `≥25%` Critical (v1 was `≤5%`/`≤15%`/`>15%`).
+- The rule-based corrective-measures engine (`recommendation_service.py`)
+  lost 6 of its 8 rules along with the fields they keyed on (excavator
+  downtime, dump-truck ratio, haul-road condition, blasting delay,
+  muckpile availability, rock hardness) — removed rather than given
+  invented replacement thresholds. Two rules survive: heavy rainfall
+  (unchanged) and low worker availability (recomputed from
+  `workers_available`/`workers_scheduled`, same 90% threshold as v1).
 - Verified end-to-end with a full dummy request → real prediction.
 
 Both schemas are centralized in `app/ml/model1/feature_schema.py` and
@@ -230,15 +246,19 @@ POST /api/shortfall
   "pit_id": "BAL_NORTH_PIT",
   "target_production_tonnes": 5000,
   "planned_operating_hours": 8,
+  "workers_scheduled": 50,
+  "workers_available": 48,
+  "excavators_available": 5,
+  "dump_trucks_operational": 10,
   "surface_water_pooling_pct": 0,
-  "...": "... (see /docs for the full field list)"
+  "previous_shift_production_tonnes": 4800,
+  "previous_day_production_tonnes": 9600
 }
 ```
-`rainfall_intensity_mm`, `cumulative_rainfall_72h`, `soil_moisture_index`,
-`land_surface_temperature_c` are optional — omit them to have the backend
-fetch live values from Open-Meteo (no API key needed) for the pit's
-coordinates; the response's `feature_sources` field says which fields came
-from you vs. the weather API.
+`rainfall_intensity_mm`, `cumulative_rainfall_72h`, `soil_moisture_index`
+are optional — omit them to have the backend fetch live values from
+Open-Meteo (no API key needed) for the pit's coordinates; the response's
+`feature_sources` field says which fields came from you vs. the weather API.
 
 ## 7. Upload workflow (non-existing study area)
 
@@ -290,9 +310,6 @@ render.yaml   # blueprint: web service (Docker) + managed Postgres
   sanity-check figure above is **not** a held-out accuracy estimate — treat
   the upstream project's own train/val/test split metrics as the real
   performance reference, not this backend's smoke test.
-- `land_surface_temperature_c` is live-sourced from Open-Meteo's 2m air
-  temperature — not a true thermal-band land-surface-temperature product.
-  Documented here and in `weather_service.py`, not silently substituted.
 - `surface_water_pooling_pct` has no generic public API and is always a
   required user input for Module 2.
 - The upload-based feature matcher is a name/synonym matcher, not a
