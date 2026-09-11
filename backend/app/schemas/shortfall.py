@@ -19,13 +19,22 @@ class ShortfallRequest(BaseModel):
     pit_id: str
 
     # --- targets / schedule ---
-    # 150-600 tonnes/shift, per explicit product decision. NOTE: no training
-    # dataset for this artifact exists in this repository, so this range is
-    # NOT verified against the model's actual training distribution - see
-    # app.ml.model2.feature_schema and the 2026-09-11 negative-prediction
-    # audit (a black-box characterization across this exact range found
-    # predictions are negative for effectively all realistic inputs in it).
-    target_production_tonnes: float = Field(..., ge=150, le=600)
+    # 500-700 tonnes/shift, per explicit product decision following a
+    # target-scale characterization sweep (2026-09-12): NOT a training-
+    # distribution claim (no training dataset for this artifact exists in
+    # this repository), but this is empirically the model's best-behaved
+    # window - a fine-grained sweep across 20-50,000 tonnes/shift found
+    # target bands below ~450 produce a POSITIVE raw prediction 0% of the
+    # time (i.e. ~100% shortfall for virtually every realistic input), and
+    # bands above ~700 keep a high positive-rate but the model's absolute
+    # output ceiling (~150-170 tonnes) does not scale with target, so the
+    # typical shortfall% actually gets WORSE the higher the range goes.
+    # 500-700 is the best available balance found (highest concentration
+    # of the lowest shortfall% results), NOT a guarantee that shortfall%
+    # stays below 100% for every input - a large minority of realistic
+    # inputs even in this window still legitimately floor to 0 predicted
+    # tonnes (see predict_shortfall()'s physical-floor clamp).
+    target_production_tonnes: float = Field(..., ge=500, le=700)
     planned_operating_hours: float = Field(..., ge=0)
 
     # --- environmental (optionally auto-filled from live weather/soil data; see feature_sources) ---

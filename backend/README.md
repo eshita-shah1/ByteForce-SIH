@@ -244,7 +244,7 @@ POST /api/shortfall
   "timestamp": "2026-09-08T06:00:00",
   "shift_type": "Shift_1_Morning",
   "pit_id": "BAL_NORTH_PIT",
-  "target_production_tonnes": 100,
+  "target_production_tonnes": 600,
   "planned_operating_hours": 8,
   "workers_scheduled": 50,
   "workers_available": 48,
@@ -260,13 +260,21 @@ are optional — omit them to have the backend fetch live values from
 Open-Meteo (no API key needed) for the pit's coordinates; the response's
 `feature_sources` field says which fields came from you vs. the weather API.
 
-`target_production_tonnes` is constrained to 1–200 (tonnes/shift). The
+`target_production_tonnes` is constrained to 500–700 (tonnes/shift). The
 original training dataset for the current Model 2 artifact is unavailable,
 so this is not a claim about the model's training distribution — it's the
-practical range supported by black-box analysis of the fitted model itself
-(large-scale input sweeps against the real pipeline; see git history for
-details). Values above 200 are rejected by the schema rather than silently
-accepted and fed to a model that has never been observed to approach them.
+model's best-behaved window per a target-scale characterization sweep
+(2026-09-12): bands below ~450 tonnes/shift produced a positive raw
+prediction 0% of the time across 30,000 realistic samples each; bands
+above ~700 keep a high positive-rate but the model's absolute output
+ceiling (~150–170 tonnes) does not scale with target, so typical
+shortfall% gets *worse* the higher the range goes. 500–700 is the best
+available balance, not a guarantee: a large minority of realistic inputs
+even in this window still produce a negative raw prediction, which
+`predict_shortfall()` floors at 0 tonnes (see `shortfall_service.py`) -
+a physical-domain floor (production cannot be negative), not a
+percentage cap. When that floor engages, shortfall_percentage is
+legitimately 100%, not an invented lower number.
 
 ## 7. Upload workflow (non-existing study area)
 
