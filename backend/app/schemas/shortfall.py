@@ -19,11 +19,13 @@ class ShortfallRequest(BaseModel):
     pit_id: str
 
     # --- targets / schedule ---
-    # 1-200 tonnes/shift: the practical range supported by black-box analysis
-    # of the fitted model (no training data is available to confirm the
-    # model's true training distribution - see app.ml.model2.feature_schema).
-    # Lower bound of 1 (not 0) avoids a divide-by-zero in shortfall_percentage.
-    target_production_tonnes: float = Field(..., ge=1, le=200)
+    # 150-600 tonnes/shift, per explicit product decision. NOTE: no training
+    # dataset for this artifact exists in this repository, so this range is
+    # NOT verified against the model's actual training distribution - see
+    # app.ml.model2.feature_schema and the 2026-09-11 negative-prediction
+    # audit (a black-box characterization across this exact range found
+    # predictions are negative for effectively all realistic inputs in it).
+    target_production_tonnes: float = Field(..., ge=150, le=600)
     planned_operating_hours: float = Field(..., ge=0)
 
     # --- environmental (optionally auto-filled from live weather/soil data; see feature_sources) ---

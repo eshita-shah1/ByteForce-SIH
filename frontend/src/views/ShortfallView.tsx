@@ -51,7 +51,7 @@ const ST = {
     previousDayProduction: 'Previous Day Production (tonnes)',
     tonnage: 'TONNAGE',
     expectedTonnage: 'Target Production (tonnes/shift)',
-    tonnageHelp: 'Enter a value between 1 and 200 tonnes/shift, the practical operating range for this model.',
+    tonnageHelp: 'Enter a value between 150 and 600 tonnes/shift, matching the model training range.',
     runAssessment: 'Run shortfall assessment',
 
     // Screen 3 Report
@@ -122,7 +122,7 @@ const ST = {
     previousDayProduction: 'पिछले दिन का उत्पादन (टन)',
     tonnage: 'टन भार',
     expectedTonnage: 'लक्षित उत्पादन (टन/शिफ्ट)',
-    tonnageHelp: '1 से 200 टन/शिफ्ट के बीच मान दर्ज करें, जो इस मॉडल के लिए व्यावहारिक परिचालन सीमा है।',
+    tonnageHelp: '150 से 600 टन/शिफ्ट के बीच मान दर्ज करें, जो मॉडल के प्रशिक्षण डेटा की सीमा के अनुरूप है।',
     runAssessment: 'कमी मूल्यांकन चलाएं',
 
     // Screen 3 Report
@@ -616,8 +616,8 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                 <input
                   type="number"
                   required
-                  min={1}
-                  max={200}
+                  min={150}
+                  max={600}
                   value={inputs.targetProductionTonnes}
                   onChange={(e) => setInputs({ ...inputs, targetProductionTonnes: parseIntOrEmpty(e.target.value) })}
                   className="w-full max-w-xs px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
