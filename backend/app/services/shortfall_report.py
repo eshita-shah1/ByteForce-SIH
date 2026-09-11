@@ -13,8 +13,8 @@ derivation from one (documented inline) - never a fabricated fact.
 
 The Hydrology and Logistics cards on the frontend each render two of these
 "not modeled" fields stacked (headline + detail line); see
-_NOT_MODELED_HEADLINE/_NOT_MODELED_DETAIL below for why those two use
-different wording instead of repeating the identical sentence twice.
+_NOT_MODELED_DETAIL below for why the detail line is left empty rather
+than repeating the same "not modeled" sentence directly underneath itself.
 """
 from __future__ import annotations
 
@@ -37,12 +37,13 @@ _NOT_MODELED = "Not modeled by this system (no such feature exists in Model 2)."
 # The Hydrology and Logistics report cards each render two fields stacked
 # (a bold headline, then a lighter detail line below it). water_table_depth/
 # haul_road_status feed the headline and water_table_risk/haul_road_slippage
-# feed the detail line - both pairs point at features v2 dropped entirely,
-# so both would otherwise show the exact same _NOT_MODELED sentence twice in
-# a row. Split into a short headline and a distinct detail line instead so
-# the honest "not modeled" disclosure doesn't read as a rendering bug.
-_NOT_MODELED_HEADLINE = "Not modeled by this system."
-_NOT_MODELED_DETAIL = "This factor is not modeled - no such feature exists in Model 2."
+# feed the detail line - but both fields in each pair point at the SAME
+# dropped v2 feature (there's no separate "depth" vs. "risk" data to report
+# for a feature that was never modeled). The full disclosure goes in the
+# headline; the detail line is left empty (the frontend hides an empty
+# detail line rather than rendering a second, redundant "not modeled"
+# sentence directly underneath the first).
+_NOT_MODELED_DETAIL = ""
 
 
 def _humanize(identifier: str) -> str:
@@ -102,9 +103,9 @@ def build_shortfall_report(request: ShortfallRequest, response: ShortfallRespons
             weather_temp=_soil_moisture_text(request, response),
             storm_risk=_rainfall_text(request, response),
             lightning_risk=_NOT_MODELED,
-            water_table_depth=_NOT_MODELED_HEADLINE,
+            water_table_depth=_NOT_MODELED,
             water_table_risk=_NOT_MODELED_DETAIL,
-            haul_road_status=_NOT_MODELED_HEADLINE,
+            haul_road_status=_NOT_MODELED,
             haul_road_slippage=_NOT_MODELED_DETAIL,
         ),
         submitted_parameters=ShortfallReportSubmittedParameters(

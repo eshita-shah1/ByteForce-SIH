@@ -919,9 +919,11 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                 <h4 className="mt-2 text-xs font-bold text-slate-900">
                   {report.environmental.waterTableDepth}
                 </h4>
-                <p className="mt-1 text-xs text-slate-500">
-                  {report.environmental.waterTableRisk}
-                </p>
+                {report.environmental.waterTableRisk && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    {report.environmental.waterTableRisk}
+                  </p>
+                )}
               </div>
 
               {/* Logistics */}
@@ -932,9 +934,11 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                 <h4 className="mt-2 text-xs font-bold text-slate-900">
                   {report.environmental.haulRoadStatus}
                 </h4>
-                <p className="mt-1 text-xs text-slate-500">
-                  {report.environmental.haulRoadSlippage}
-                </p>
+                {report.environmental.haulRoadSlippage && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    {report.environmental.haulRoadSlippage}
+                  </p>
+                )}
               </div>
             </div>
           </div>
