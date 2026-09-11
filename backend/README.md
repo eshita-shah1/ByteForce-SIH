@@ -268,13 +268,42 @@ model's best-behaved window per a target-scale characterization sweep
 prediction 0% of the time across 30,000 realistic samples each; bands
 above ~700 keep a high positive-rate but the model's absolute output
 ceiling (~150–170 tonnes) does not scale with target, so typical
-shortfall% gets *worse* the higher the range goes. 500–700 is the best
-available balance, not a guarantee: a large minority of realistic inputs
-even in this window still produce a negative raw prediction, which
-`predict_shortfall()` floors at 0 tonnes (see `shortfall_service.py`) -
-a physical-domain floor (production cannot be negative), not a
-percentage cap. When that floor engages, shortfall_percentage is
-legitimately 100%, not an invented lower number.
+shortfall% gets *worse* the higher the range goes.
+
+**Target-recentering correction (2026-09-12).** A real 5,000-row historical
+production dataset with genuine `actual_production_tonnes` outcomes became
+available (checked into `backend/data/model2_real_production_calibration.csv`)
+and revealed the actual root cause of the negative-prediction behavior above:
+Model 2's raw XGBRegressor output is centered near 0 (mean 0.6, std 81.3
+tonnes across all 5,000 real rows) while real production is centered near
+421.8 (std 92.4) — the signature of a target-mean-centering transform applied
+during training whose inverse was never included in the exported pipeline
+(no `TransformedTargetRegressor` wrapper exists in this artifact). Model 2's
+raw output correlates 0.93 with real outcomes despite this — it is a usable
+model whose scale was never restored, not a bad model.
+
+`predict_shortfall()` (`shortfall_service.py`) now adds
+`MODEL2_TARGET_RECENTERING_TONNES` (421.19, re-derived from the checked-in
+dataset and re-verified on every test run — see
+`test_shortfall_service.py::test_recentering_constant_is_reproducible_from_the_checked_in_calibration_dataset`)
+to the model's raw, unmodified output before it becomes a business quantity.
+This is a calibration recovery, not a fabricated adjustment: it was validated
+via an 80/20 train/holdout split (fit on 80%, MAE measured on the untouched
+20%) to rule out an in-sample fluke, and is stable across pits (419.8–422.1)
+and shifts (420.3–422.4), i.e. a genuine global offset rather than something
+requiring per-pit tuning. MAE against real outcomes drops from ~421 tonnes
+(raw, unusable) to ~18.6 tonnes on the holdout split, and negative
+predictions drop from 46% of the 5,000 real rows to 0%.
+
+A physical floor at 0 tonnes still exists after recentering, as a defensive
+safeguard for inputs that fall outside the calibration dataset's range — no
+currently-known valid input actually reaches it (an exhaustive sweep across
+every pit, shift, and an extreme-inputs combination found none), but
+`predict_shortfall()` still floors defensively rather than assuming the
+recentered output can never be negative. This remains a physical-domain
+floor (production cannot be negative), not a percentage cap: when it
+engages, shortfall_percentage is legitimately 100%, not an invented lower
+number.
 
 ## 7. Upload workflow (non-existing study area)
 

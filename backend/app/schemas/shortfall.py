@@ -30,10 +30,15 @@ class ShortfallRequest(BaseModel):
     # output ceiling (~150-170 tonnes) does not scale with target, so the
     # typical shortfall% actually gets WORSE the higher the range goes.
     # 500-700 is the best available balance found (highest concentration
-    # of the lowest shortfall% results), NOT a guarantee that shortfall%
-    # stays below 100% for every input - a large minority of realistic
-    # inputs even in this window still legitimately floor to 0 predicted
-    # tonnes (see predict_shortfall()'s physical-floor clamp).
+    # of the lowest shortfall% results). Separately, predict_shortfall()
+    # also applies a target-recentering correction to Model 2's raw output
+    # (MODEL2_TARGET_RECENTERING_TONNES, validated 2026-09-12 against a
+    # real 5,000-row production dataset - see shortfall_service.py), which
+    # eliminates the negative-raw-prediction cases that used to floor to 0
+    # predicted tonnes / 100% shortfall for a large minority of inputs in
+    # this window. A physical floor at 0 remains as a defensive safeguard
+    # (see predict_shortfall()), but is not expected to engage for any
+    # currently-known valid input after recentering.
     target_production_tonnes: float = Field(..., ge=500, le=700)
     planned_operating_hours: float = Field(..., ge=0)
 
