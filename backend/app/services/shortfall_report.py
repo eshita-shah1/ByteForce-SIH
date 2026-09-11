@@ -2,19 +2,18 @@
 POST /api/shortfall's optional `report` field) from real ShortfallRequest/
 ShortfallResponse values only.
 
-v2 model note: haul-road condition and blasting scheduling are no longer
-Model 2 features (see app.ml.model2.feature_schema) - those two report
-slots are now labeled "not modeled" rather than invented, same as lightning
-risk and groundwater/water-table depth (which never had a source). The
-"climate" slot now surfaces soil_moisture_index (a real, still-present
-feature) instead of the removed land_surface_temperature_c. Everything
-else is either a direct pass-through of a real value, or a deterministic
-derivation from one (documented inline) - never a fabricated fact.
-
-The Hydrology and Logistics cards on the frontend each render two of these
-"not modeled" fields stacked (headline + detail line); see
-_NOT_MODELED_DETAIL below for why the detail line is left empty rather
-than repeating the same "not modeled" sentence directly underneath itself.
+v2 model note: blasting scheduling is no longer a Model 2 feature (see
+app.ml.model2.feature_schema) - that report slot is labeled "not modeled"
+rather than invented, same as lightning risk (which never had a source).
+Water-table depth/risk and haul-road status/slippage were dropped from
+ShortfallReportEnvironmental entirely (and from the frontend's Hydrology/
+Logistics cards) rather than kept around as permanent "not modeled"
+placeholders - v2 has no such features at all, so there was nothing for
+those slots to ever report. The "climate" slot surfaces soil_moisture_index
+(a real, still-present feature) instead of the removed
+land_surface_temperature_c. Everything else is either a direct pass-through
+of a real value, or a deterministic derivation from one (documented inline)
+- never a fabricated fact.
 """
 from __future__ import annotations
 
@@ -34,16 +33,6 @@ from app.schemas.shortfall_report import (
 _RISK_LEVEL_MAP = {"Normal": "LOW", "Alert": "MODERATE RISK", "Critical": "HIGH RISK"}
 _SEVERITY_WEIGHT = {"high": 3, "medium": 2, "low": 1}
 _NOT_MODELED = "Not modeled by this system (no such feature exists in Model 2)."
-# The Hydrology and Logistics report cards each render two fields stacked
-# (a bold headline, then a lighter detail line below it). water_table_depth/
-# haul_road_status feed the headline and water_table_risk/haul_road_slippage
-# feed the detail line - but both fields in each pair point at the SAME
-# dropped v2 feature (there's no separate "depth" vs. "risk" data to report
-# for a feature that was never modeled). The full disclosure goes in the
-# headline; the detail line is left empty (the frontend hides an empty
-# detail line rather than rendering a second, redundant "not modeled"
-# sentence directly underneath the first).
-_NOT_MODELED_DETAIL = ""
 
 
 def _humanize(identifier: str) -> str:
@@ -103,10 +92,6 @@ def build_shortfall_report(request: ShortfallRequest, response: ShortfallRespons
             weather_temp=_soil_moisture_text(request, response),
             storm_risk=_rainfall_text(request, response),
             lightning_risk=_NOT_MODELED,
-            water_table_depth=_NOT_MODELED,
-            water_table_risk=_NOT_MODELED_DETAIL,
-            haul_road_status=_NOT_MODELED,
-            haul_road_slippage=_NOT_MODELED_DETAIL,
         ),
         submitted_parameters=ShortfallReportSubmittedParameters(
             target_site=_humanize(request.pit_id),

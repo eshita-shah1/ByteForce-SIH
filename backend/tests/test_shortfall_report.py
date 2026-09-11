@@ -83,6 +83,12 @@ def test_contributing_factor_weights_sum_to_100_percent():
 
 
 def test_unmodeled_fields_are_honestly_labeled_not_fabricated():
+    """water_table_depth/risk and haul_road_status/slippage were removed
+    from ShortfallReportEnvironmental entirely (and from the frontend's
+    Hydrology/Logistics cards) rather than kept as permanent "not modeled"
+    placeholders - v2 has no such features at all. The remaining fields
+    that genuinely have no source (lightning_risk, blasting_scheduled) are
+    still honestly labeled, not fabricated."""
     request = _valid_request()
     response = _response_with_measures(
         CorrectiveMeasure(factor="none", severity="low", action="x", reason="y")
@@ -92,37 +98,9 @@ def test_unmodeled_fields_are_honestly_labeled_not_fabricated():
 
     assert "not modeled" in report.environmental.lightning_risk.lower()
     assert "not assessed" in report.submitted_parameters.geological_profile.lower()
-    # v2 model dropped haul-road and blasting features entirely - must be
-    # honestly labeled, not silently left showing stale/fabricated content.
-    assert "not modeled" in report.environmental.water_table_depth.lower()
-    assert "not modeled" in report.environmental.haul_road_status.lower()
     assert "not modeled" in report.submitted_parameters.blasting_scheduled.lower()
-
-
-def test_paired_not_modeled_fields_are_not_literally_duplicated():
-    """The Hydrology card renders water_table_depth (headline) directly
-    above water_table_risk (detail line); the Logistics card does the same
-    for haul_road_status/haul_road_slippage. Both fields in each pair point
-    at the SAME dropped v2 feature - there's no separate "depth" vs. "risk"
-    fact to report - so the full "not modeled" disclosure belongs in the
-    headline only, and the detail line must be empty (the frontend hides an
-    empty detail line rather than rendering a second, redundant "not
-    modeled" sentence directly underneath the first). Regression test for
-    the previous version of this fix, which worded the two fields
-    differently but still showed two separate "not modeled" sentences
-    stacked on top of each other."""
-    request = _valid_request()
-    response = _response_with_measures(
-        CorrectiveMeasure(factor="none", severity="low", action="x", reason="y")
-    )
-
-    report = build_shortfall_report(request, response)
-
-    assert "not modeled" in report.environmental.water_table_depth.lower()
-    assert report.environmental.water_table_risk == ""
-
-    assert "not modeled" in report.environmental.haul_road_status.lower()
-    assert report.environmental.haul_road_slippage == ""
+    assert not hasattr(report.environmental, "water_table_depth")
+    assert not hasattr(report.environmental, "haul_road_status")
 
 
 def test_corrective_measures_are_passed_through_verbatim():

@@ -20,10 +20,6 @@ class ShortfallReportEnvironmental(BaseModel):
     weather_temp: str = Field(alias="weatherTemp")
     storm_risk: str = Field(alias="stormRisk")
     lightning_risk: str = Field(alias="lightningRisk")
-    water_table_depth: str = Field(alias="waterTableDepth")
-    water_table_risk: str = Field(alias="waterTableRisk")
-    haul_road_status: str = Field(alias="haulRoadStatus")
-    haul_road_slippage: str = Field(alias="haulRoadSlippage")
 
 
 class ShortfallReportSubmittedParameters(BaseModel):

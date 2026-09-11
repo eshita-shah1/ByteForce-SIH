@@ -84,10 +84,6 @@ export interface ShortfallReportData {
     weatherTemp: string;
     stormRisk: string;
     lightningRisk: string;
-    waterTableDepth: string;
-    waterTableRisk: string;
-    haulRoadStatus: string;
-    haulRoadSlippage: string;
   };
   submittedParameters: {
     targetSite: string;

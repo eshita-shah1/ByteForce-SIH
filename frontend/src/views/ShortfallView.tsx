@@ -79,8 +79,6 @@ const ST = {
     deficitGap: 'Estimated Production Deficit',
     tonnes: 'tonnes',
     climate: 'CLIMATE',
-    hydrology: 'HYDROLOGY',
-    logistics: 'LOGISTICS',
     envContextUpper: 'LIVE ENVIRONMENTAL CONTEXT',
     submittedParams: 'Submitted Operational Parameters',
     targetCoordinates: 'Target Coordinates',
@@ -153,8 +151,6 @@ const ST = {
     deficitGap: 'अनुमानित उत्पादन घाटा',
     tonnes: 'टन',
     climate: 'जलवायु',
-    hydrology: 'जल विज्ञान',
-    logistics: 'रसद',
     envContextUpper: 'लाइव पर्यावरण संदर्भ',
     submittedParams: 'प्रस्तुत परिचालन पैरामीटर',
     targetCoordinates: 'लक्ष्य निर्देशांक',
@@ -892,54 +888,26 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
             </div>
           </div>
 
-          {/* 2. Live Environmental Context (3 cards) */}
+          {/* 2. Live Environmental Context - Climate is the only card Model 2
+              actually has a live source for (soil moisture / rainfall); the
+              Hydrology (water table) and Logistics (haul road) cards were
+              removed rather than shown as permanent "not modeled"
+              placeholders - v2 dropped those features entirely, so there is
+              nothing for those cards to ever display. */}
           <div className="break-inside-avoid print:mt-2">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5 print:mb-1.5">
               {st.envContextUpper}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-4 print:gap-3">
-              {/* Climate */}
-              <div className="bg-white p-4 print:p-2.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle break-inside-avoid">
-                <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                  {st.climate}
-                </span>
-                <h4 className="mt-2 text-xs font-bold text-slate-900">
-                  {report.environmental.weatherTemp}
-                </h4>
-                <p className="mt-1 text-xs text-slate-500">
-                  {report.environmental.stormRisk}
-                </p>
-              </div>
-
-              {/* Hydrology */}
-              <div className="bg-white p-4 print:p-2.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle break-inside-avoid">
-                <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                  {st.hydrology}
-                </span>
-                <h4 className="mt-2 text-xs font-bold text-slate-900">
-                  {report.environmental.waterTableDepth}
-                </h4>
-                {report.environmental.waterTableRisk && (
-                  <p className="mt-1 text-xs text-slate-500">
-                    {report.environmental.waterTableRisk}
-                  </p>
-                )}
-              </div>
-
-              {/* Logistics */}
-              <div className="bg-white p-4 print:p-2.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle break-inside-avoid">
-                <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                  {st.logistics}
-                </span>
-                <h4 className="mt-2 text-xs font-bold text-slate-900">
-                  {report.environmental.haulRoadStatus}
-                </h4>
-                {report.environmental.haulRoadSlippage && (
-                  <p className="mt-1 text-xs text-slate-500">
-                    {report.environmental.haulRoadSlippage}
-                  </p>
-                )}
-              </div>
+            <div className="bg-white p-4 print:p-2.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle break-inside-avoid max-w-sm">
+              <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                {st.climate}
+              </span>
+              <h4 className="mt-2 text-xs font-bold text-slate-900">
+                {report.environmental.weatherTemp}
+              </h4>
+              <p className="mt-1 text-xs text-slate-500">
+                {report.environmental.stormRisk}
+              </p>
             </div>
           </div>
 
