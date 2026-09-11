@@ -105,6 +105,21 @@ export type UploadStatusResult =
   | { ok: true; data: UploadStatusApiResponse }
   | { ok: false; message: string };
 
+/** Mirrors backend app/api/study_area.py's real GeoJSON response exactly. */
+export interface StudyAreaApiResponse {
+  success: boolean;
+  type: 'FeatureCollection';
+  features: Array<{
+    type: 'Feature';
+    geometry: { type: 'Polygon' | 'MultiPolygon'; coordinates: number[][][] | number[][][][] };
+    properties: Record<string, unknown>;
+  }>;
+}
+
+export type StudyAreaApiResult =
+  | { ok: true; data: StudyAreaApiResponse }
+  | { ok: false; message: string };
+
 export const api = {
   /**
    * User authentication endpoint (POST /api/auth/login). Distinguishes
@@ -163,48 +178,6 @@ export const api = {
   },
 
   /**
-   * Upload a GIS layer / shapefile / assay log via the real backend upload
-   * pipeline (POST /api/upload - a multi-file, validate-on-ingest endpoint;
-   * there is no separate /api/documents/upload). The backend only returns
-   * {upload_id, status} for the whole batch, not a GISFileItem - so the
-   * returned item is built from the real values we already have (the
-   * File object, the category the caller passed, the real upload_id/status
-   * the backend returned), not invented.
-   */
-  async uploadDocument(file: File, category: string): Promise<GISFileItem | null> {
-    try {
-      const formData = new FormData();
-      formData.append('files', file);
-      formData.append('category', category);
-
-      const res = await fetch(`${API_BASE_URL}/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const data = await res.json();
-
-      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-      const format: GISFileItem['format'] =
-        ext === 'tif' || ext === 'tiff' ? 'tif' : ext === 'shp' ? 'shp' : ext === 'geojson' || ext === 'json' ? 'geojson' : 'csv';
-      const status: GISFileItem['status'] = data.status === 'validated' ? 'ready' : data.status === 'failed' ? 'pending' : 'validating';
-
-      return {
-        id: data.upload_id,
-        name: file.name,
-        format,
-        category,
-        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-        uploadedAt: new Date().toISOString(),
-        status,
-      };
-    } catch (err) {
-      console.error('Document upload failed:', err);
-      return null;
-    }
-  },
-
-  /**
    * Run Shortfall Forecaster Model via backend (POST /api/shortfall) - v2
    * model. Every field the backend actually requires is now collected by
    * ShortfallView, so this sends the real, complete request (no fields left
@@ -248,6 +221,28 @@ export const api = {
       return { ok: false, message: body?.message || `Server error (${res.status}). Please try again.` };
     }
     return { ok: true, data: body as ShortfallApiResponse };
+  },
+
+  /**
+   * Fetch the real study-area boundary (GET /api/study-area) - the actual
+   * PostGIS-derived union of the 850-cell grid footprint, not a hand-drawn
+   * approximation. Used by ProspectivityView / StudyAreaMap to render the
+   * boundary and to validate clicked/entered coordinates.
+   */
+  async getStudyArea(): Promise<StudyAreaApiResult> {
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE_URL}/study-area`);
+    } catch (err) {
+      console.error('Backend study-area endpoint unreachable:', err);
+      return { ok: false, message: 'Unable to reach the server. Please try again.' };
+    }
+
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { ok: false, message: body?.message || `Server error (${res.status}). Please try again.` };
+    }
+    return { ok: true, data: body as StudyAreaApiResponse };
   },
 
   /**

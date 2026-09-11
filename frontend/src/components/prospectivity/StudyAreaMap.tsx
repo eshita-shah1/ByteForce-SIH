@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Polygon, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { BHARVELI_CENTER, BHARVELI_CONCESSION_POLYGON } from '../../utils/geoUtils';
+import { BHARVELI_CENTER } from '../../utils/geoUtils';
 
 // Leaflet default icon fix
 const defaultIcon = L.icon({
@@ -17,6 +17,9 @@ const defaultIcon = L.icon({
 interface StudyAreaMapProps {
   selectedCoord: { lat: number; lng: number };
   onMapClick: (lat: number, lng: number) => void;
+  /** Real study-area boundary from GET /api/study-area (see
+   * geoJsonToLeafletPositions), nested as polygon -> ring -> [lat, lng]. */
+  boundaryPositions: [number, number][][][];
 }
 
 // Controller to handle user clicks on the map
@@ -40,7 +43,7 @@ function MapRecenter({ lat, lng }: { lat: number; lng: number }) {
   return null;
 }
 
-export const StudyAreaMap: React.FC<StudyAreaMapProps> = ({ selectedCoord, onMapClick }) => {
+export const StudyAreaMap: React.FC<StudyAreaMapProps> = ({ selectedCoord, onMapClick, boundaryPositions }) => {
   return (
     <div className="w-full h-full min-h-[440px] relative rounded-lg overflow-hidden border border-slate-200">
       <MapContainer
@@ -54,9 +57,11 @@ export const StudyAreaMap: React.FC<StudyAreaMapProps> = ({ selectedCoord, onMap
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {/* Bharveli & Balaghat Concession Polygon Boundary */}
+        {/* Real study-area boundary (union of the 850-cell grid footprint,
+            from GET /api/study-area) - a MultiPolygon, so this renders every
+            disjoint part in one Polygon layer. */}
         <Polygon
-          positions={BHARVELI_CONCESSION_POLYGON}
+          positions={boundaryPositions}
           pathOptions={{
             color: '#183D2B',
             weight: 2.5,

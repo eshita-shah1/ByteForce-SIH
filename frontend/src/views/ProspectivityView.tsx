@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronUp,
@@ -15,7 +15,7 @@ import {
   MapPin,
 } from 'lucide-react';
 import { StudyAreaMap } from '../components/prospectivity/StudyAreaMap';
-import { BHARVELI_CENTER, isInsideStudyArea, formatCoordinate } from '../utils/geoUtils';
+import { BHARVELI_CENTER, isInsideStudyArea, formatCoordinate, geoJsonToLeafletPositions } from '../utils/geoUtils';
 import { useAuth } from '../context/AuthContext';
 import { AnimatedNumber } from '../components/core/AnimatedNumber';
 import { api, ProspectivityApiResponse, UploadStatusApiResponse } from '../services/api';
@@ -172,6 +172,40 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
   const [isPredictingUpload, setIsPredictingUpload] = useState<boolean>(false);
   const [uploadPredictError, setUploadPredictError] = useState<string | null>(null);
 
+  // Real study-area boundary (GET /api/study-area) - drives both the map
+  // overlay and the "inside boundary" validation on Tab 1. No hardcoded
+  // fallback shape: until this loads (or if it fails), Tab 1's map/inputs
+  // are gated rather than validated against a guessed boundary.
+  const [studyAreaRings, setStudyAreaRings] = useState<[number, number][][][] | null>(null);
+  const [studyAreaError, setStudyAreaError] = useState<string | null>(null);
+  const [isLoadingStudyArea, setIsLoadingStudyArea] = useState<boolean>(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const response = await api.getStudyArea();
+      if (cancelled) return;
+      setIsLoadingStudyArea(false);
+      if (!response.ok) {
+        setStudyAreaError(response.message);
+        return;
+      }
+      const feature = response.data.features[0];
+      if (!feature) {
+        setStudyAreaError('The server did not return a study-area boundary.');
+        return;
+      }
+      setStudyAreaRings(geoJsonToLeafletPositions(feature.geometry));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Flattened outer rings for the point-in-polygon check (isInsideStudyArea
+  // tests membership against each polygon's outer ring only).
+  const studyAreaOuterRings: [number, number][][] = (studyAreaRings ?? []).map((polygon) => polygon[0]);
+
   const handleTabSwitch = (tab: 'existing' | 'upload') => {
     setActiveTab(tab);
     setShowReport(false);
@@ -182,7 +216,7 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
 
   // Map click handler with point-in-polygon validation
   const handleMapClick = (clickedLat: number, clickedLng: number) => {
-    const inside = isInsideStudyArea(clickedLat, clickedLng);
+    const inside = isInsideStudyArea(clickedLat, clickedLng, studyAreaOuterRings);
     setLat(clickedLat);
     setLng(clickedLng);
 
@@ -195,7 +229,7 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
   const adjustLat = (delta: number) => {
     const newLat = parseFloat((lat + delta).toFixed(6));
     setLat(newLat);
-    if (!isInsideStudyArea(newLat, lng)) {
+    if (!isInsideStudyArea(newLat, lng, studyAreaOuterRings)) {
       setShowOutsideBoundaryModal(true);
     }
   };
@@ -203,13 +237,13 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
   const adjustLng = (delta: number) => {
     const newLng = parseFloat((lng + delta).toFixed(6));
     setLng(newLng);
-    if (!isInsideStudyArea(lat, newLng)) {
+    if (!isInsideStudyArea(lat, newLng, studyAreaOuterRings)) {
       setShowOutsideBoundaryModal(true);
     }
   };
 
   const handleRunModel = async () => {
-    if (!isInsideStudyArea(lat, lng)) {
+    if (!isInsideStudyArea(lat, lng, studyAreaOuterRings)) {
       setShowOutsideBoundaryModal(true);
       return;
     }
@@ -569,10 +603,24 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                 </div>
 
                 <div className="h-[480px] w-full">
-                  <StudyAreaMap
-                    selectedCoord={{ lat, lng }}
-                    onMapClick={handleMapClick}
-                  />
+                  {isLoadingStudyArea ? (
+                    <div className="w-full h-full min-h-[440px] flex flex-col items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-500">
+                      <div className="w-6 h-6 border-2 border-brand-forest/30 border-t-brand-forest rounded-full animate-spin" />
+                      <p>Loading study-area boundary...</p>
+                    </div>
+                  ) : studyAreaError || !studyAreaRings ? (
+                    <div className="w-full h-full min-h-[440px] flex flex-col items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 text-xs text-red-700 p-6 text-center">
+                      <AlertTriangle className="w-5 h-5 text-red-500" />
+                      <p className="font-semibold">Unable to load the study-area boundary.</p>
+                      <p className="text-red-600">{studyAreaError || 'The server returned no boundary data.'}</p>
+                    </div>
+                  ) : (
+                    <StudyAreaMap
+                      selectedCoord={{ lat, lng }}
+                      onMapClick={handleMapClick}
+                      boundaryPositions={studyAreaRings}
+                    />
+                  )}
                 </div>
 
                 <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
@@ -603,7 +651,7 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                           const val = parseFloat(e.target.value);
                           if (!isNaN(val)) {
                             setLat(val);
-                            if (!isInsideStudyArea(val, lng)) {
+                            if (!isInsideStudyArea(val, lng, studyAreaOuterRings)) {
                               setShowOutsideBoundaryModal(true);
                             }
                           }
@@ -643,7 +691,7 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                           const val = parseFloat(e.target.value);
                           if (!isNaN(val)) {
                             setLng(val);
-                            if (!isInsideStudyArea(lat, val)) {
+                            if (!isInsideStudyArea(lat, val, studyAreaOuterRings)) {
                               setShowOutsideBoundaryModal(true);
                             }
                           }
@@ -672,7 +720,7 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                   {/* Action Button */}
                   <button
                     onClick={handleRunModel}
-                    disabled={isCalculating}
+                    disabled={isCalculating || isLoadingStudyArea || !studyAreaRings}
                     className="w-full mt-2 py-2.5 px-4 rounded-lg bg-brand-forest hover:bg-brand-forest-hover text-white text-xs font-semibold tracking-wide transition-all shadow-sm flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-75 cursor-pointer"
                   >
                     {isCalculating ? (

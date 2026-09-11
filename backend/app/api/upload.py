@@ -11,7 +11,7 @@ from app.db.database import get_db
 from app.ml.model1.feature_schema import get_feature_columns
 from app.schemas.prospectivity import ProspectivityLocation, ProspectivityRequest, ProspectivityResponse
 from app.schemas.upload import DatasetValidationResult, UploadCreateResponse, UploadStatusResponse
-from app.services import upload_service
+from app.services import log_service, upload_service
 from app.services.feature_service import SourceIndex
 from app.services.model1_service import model1_service
 
@@ -79,6 +79,14 @@ def predict_from_upload(
         )
 
     result = model1_service.predict(resolved)
+
+    log_service.record_run(
+        db,
+        model_type="Prospectivity",
+        title=f"Prospectivity scan @ {request.latitude:.4f}, {request.longitude:.4f} (uploaded dataset)",
+        target_site=f"{request.latitude:.4f}, {request.longitude:.4f}",
+        metric_highlight=f"{result['probability']:.0%} · {result['prediction'].replace('_', ' ')}",
+    )
 
     return ProspectivityResponse(
         location=ProspectivityLocation(latitude=request.latitude, longitude=request.longitude),
