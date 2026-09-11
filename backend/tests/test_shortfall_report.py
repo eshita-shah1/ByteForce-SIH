@@ -100,6 +100,32 @@ def test_unmodeled_fields_are_honestly_labeled_not_fabricated():
     assert "not modeled" in report.submitted_parameters.blasting_scheduled.lower()
 
 
+def test_paired_not_modeled_fields_are_not_literally_duplicated():
+    """The Hydrology card renders water_table_depth (headline) directly
+    above water_table_risk (detail line); the Logistics card does the same
+    for haul_road_status/haul_road_slippage. Both pairs point at features v2
+    dropped entirely, so both are honestly labeled 'not modeled' - but if
+    both fields in a pair used the exact same sentence, the two stacked UI
+    elements would show the identical sentence twice in a row, which reads
+    as a rendering bug rather than an honest disclosure. Regression test for
+    that: the two fields in each pair must be worded differently, while each
+    still says 'not modeled'."""
+    request = _valid_request()
+    response = _response_with_measures(
+        CorrectiveMeasure(factor="none", severity="low", action="x", reason="y")
+    )
+
+    report = build_shortfall_report(request, response)
+
+    assert report.environmental.water_table_depth != report.environmental.water_table_risk
+    assert "not modeled" in report.environmental.water_table_depth.lower()
+    assert "not modeled" in report.environmental.water_table_risk.lower()
+
+    assert report.environmental.haul_road_status != report.environmental.haul_road_slippage
+    assert "not modeled" in report.environmental.haul_road_status.lower()
+    assert "not modeled" in report.environmental.haul_road_slippage.lower()
+
+
 def test_corrective_measures_are_passed_through_verbatim():
     request = _valid_request()
     response = _response_with_measures(
