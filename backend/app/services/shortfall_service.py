@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 
 from app.core.config import Settings
 from app.ml.model2.feature_schema import LIVE_SOURCEABLE_FEATURES, NUMERIC_FEATURES
@@ -8,6 +9,8 @@ from app.schemas.shortfall import ShortfallRequest, ShortfallResponse
 from app.services.external_data_service import resolve_environment_features
 from app.services.model2_service import model2_service
 from app.services.recommendation_service import build_recommendations, calculate_risk
+
+logger = logging.getLogger("app.shortfall")
 
 
 async def predict_shortfall(request: ShortfallRequest, settings: Settings) -> ShortfallResponse:
@@ -20,7 +23,31 @@ async def predict_shortfall(request: ShortfallRequest, settings: Settings) -> Sh
     request_dict["month"] = timestamp.month
     request_dict["day_of_week"] = timestamp.weekday()
 
-    prediction = model2_service.predict(request_dict)
+    raw_prediction = model2_service.predict(request_dict)
+
+    # Model 2's fitted XGBRegressor (objective=reg:squarederror, no target
+    # transform, no built-in non-negativity constraint - verified directly
+    # against the artifact, not assumed) is free to extrapolate below zero
+    # for inputs far from its training distribution; this has been
+    # empirically confirmed to happen for realistic inputs under the
+    # current 150-600 tonnes/shift target range (see the 2026-09 negative-
+    # prediction audit). A negative extracted-tonnage figure is not a
+    # meaningful real-world quantity - production this shift was either
+    # some non-negative amount or effectively zero - so the operational
+    # prediction is floored at 0 tonnes here, at the single point where
+    # the model's raw output becomes a business quantity. This is a
+    # physical-domain floor applied uniformly to every request, not a
+    # percentage cap: shortfall_percentage staying within [0, 100] falls
+    # out of this floor as a mathematical consequence (shortfall can never
+    # exceed target once predicted can never go below 0), it is not
+    # separately clamped anywhere.
+    prediction = max(0.0, raw_prediction)
+    if raw_prediction < 0:
+        logger.info(
+            "Model 2 raw prediction %.2f tonnes was negative for pit=%s shift=%s target=%.2f; "
+            "floored to 0.0 tonnes for the operational report.",
+            raw_prediction, request.pit_id, request.shift_type, request.target_production_tonnes,
+        )
 
     target = request.target_production_tonnes
     shortfall = max(0.0, target - prediction)

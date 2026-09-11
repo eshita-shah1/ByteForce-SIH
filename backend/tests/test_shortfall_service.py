@@ -101,3 +101,78 @@ async def test_predict_shortfall_flags_high_shortfall_as_critical():
 
     assert response.shortfall_percentage >= 25
     assert response.risk == "Critical"
+
+
+@pytest.mark.asyncio
+async def test_predicted_production_is_never_negative_even_when_raw_model_output_is():
+    """Regression test for the physical-floor fix in predict_shortfall():
+    Model 2's raw XGBRegressor output can genuinely go negative for
+    realistic inputs (verified directly against the artifact - no target
+    transform, no built-in non-negativity constraint). A negative tonnage
+    is not a meaningful real-world quantity, so predicted_production_tonnes
+    must be floored at 0 - and, as a direct mathematical consequence (not
+    a separate cap), shortfall_percentage must never exceed 100%."""
+    from app.services.model2_service import model2_service
+    from app.services.shortfall_service import predict_shortfall
+
+    settings = get_settings()
+    if not settings.model2_pipeline_path.exists():
+        pytest.skip("Model 2 artifact not present in models/")
+    if not model2_service.is_loaded:
+        model2_service.load(settings)
+    if not model2_service.is_loaded:
+        pytest.skip("Model 2 failed to load in this environment.")
+
+    # Inputs empirically confirmed (2026-09 audit) to drive the real raw
+    # model prediction negative for this artifact.
+    request = ShortfallRequest(
+        **_valid_payload(
+            target_production_tonnes=150,
+            workers_available=48,
+            workers_scheduled=50,
+            excavators_available=8,
+            dump_trucks_operational=15,
+            surface_water_pooling_pct=2,
+            previous_shift_production_tonnes=140,
+            previous_day_production_tonnes=420,
+            rainfall_intensity_mm=0.0,
+            cumulative_rainfall_72h=0.0,
+            soil_moisture_index=10.0,
+        )
+    )
+    response = await predict_shortfall(request, settings)
+
+    assert response.predicted_production_tonnes >= 0
+    assert 0 <= response.shortfall_percentage <= 100
+    assert response.shortfall_tonnes >= 0
+    assert response.shortfall_tonnes <= response.target_production_tonnes
+    # This specific combination's raw prediction is negative (confirmed via
+    # direct pipeline inspection), so the floor should actually engage here,
+    # not just happen to already be non-negative.
+    assert response.predicted_production_tonnes == 0.0
+    assert response.shortfall_percentage == 100.0
+
+
+@pytest.mark.asyncio
+async def test_shortfall_percentage_never_exceeds_100_across_target_range():
+    """Sweeps target_production_tonnes across its full 150-600 schema
+    range with fixed, otherwise-identical inputs and checks every
+    response obeys 0 <= predicted, 0 <= shortfall% <= 100 - guards
+    against the exact bug reported (111%/132%/290% shortfalls from
+    negative predicted_production_tonnes)."""
+    from app.services.model2_service import model2_service
+    from app.services.shortfall_service import predict_shortfall
+
+    settings = get_settings()
+    if not settings.model2_pipeline_path.exists():
+        pytest.skip("Model 2 artifact not present in models/")
+    if not model2_service.is_loaded:
+        model2_service.load(settings)
+    if not model2_service.is_loaded:
+        pytest.skip("Model 2 failed to load in this environment.")
+
+    for target in (150, 200, 300, 500, 600):
+        request = ShortfallRequest(**_valid_payload(target_production_tonnes=target))
+        response = await predict_shortfall(request, settings)
+        assert response.predicted_production_tonnes >= 0, f"negative prediction at target={target}"
+        assert 0 <= response.shortfall_percentage <= 100, f"shortfall%% out of bounds at target={target}"
