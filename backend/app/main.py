@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, documents, health, logs, prospectivity, shortfall, study_area, upload
+from app.api import admin, auth, documents, environment, health, logs, prospectivity, shortfall, study_area, upload
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import RequestContextMiddleware, configure_logging
@@ -48,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(prospectivity.router)
     app.include_router(upload.router)
     app.include_router(shortfall.router)
+    app.include_router(environment.router)
     app.include_router(admin.router)
 
     @app.on_event("startup")

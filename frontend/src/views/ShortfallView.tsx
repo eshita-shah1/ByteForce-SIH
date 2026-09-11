@@ -1,20 +1,24 @@
-import React, { useState } from 'react';
-import { 
-  Compass, 
-  ArrowRight, 
-  Clock, 
-  CloudRain, 
-  Droplets, 
-  Thermometer, 
-  AlertTriangle, 
-  FileDown, 
+import React, { useState, useEffect } from 'react';
+import {
+  Compass,
+  ArrowRight,
+  Clock,
+  CloudRain,
+  Droplets,
+  Thermometer,
+  AlertTriangle,
+  FileDown,
   RotateCcw,
-  Layers
+  Layers,
+  RefreshCw
 } from 'lucide-react';
-import { api } from '../services/api';
+import { api, EnvironmentApiResponse } from '../services/api';
 import { PitId, ShiftType, ShortfallOperationalInputs, ShortfallReportData, ShortfallSiteInfo } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { AnimatedNumber } from '../components/core/AnimatedNumber';
+
+// Live Environmental Context bar refresh interval.
+const ENVIRONMENT_REFRESH_MS = 5 * 60 * 1000;
 
 const ST = {
   en: {
@@ -35,8 +39,11 @@ const ST = {
     soilMoisture: 'SOIL MOISTURE',
     temperature: 'TEMPERATURE',
     surfaceWater: 'SURFACE WATER',
-    surfaceWaterDesc: 'Moderate surface runoff near bench drains',
-    envSource: 'Source: Balaghat Regional Micro-Weather API · Refreshed automatically',
+    envSourceLabel: 'Source: Open-Meteo',
+    envObservedLabel: 'Observed',
+    envLoadingText: 'Loading…',
+    envErrorText: 'Environmental data unavailable',
+    envRetryText: 'Retry',
     operationalInputs: 'Operational Inputs',
     workforce: 'WORKFORCE',
     workersAvailable: 'Workers Available (persons)',
@@ -106,8 +113,11 @@ const ST = {
     soilMoisture: 'मिट्टी की नमी',
     temperature: 'तापमान',
     surfaceWater: 'सतही जल',
-    surfaceWaterDesc: 'बेंच नालों के पास मध्यम सतही अपवाह',
-    envSource: 'स्रोत: बालाघाट क्षेत्रीय सूक्ष्म-मौसम एपीआई · स्वचालित रूप से रीफ्रेश',
+    envSourceLabel: 'स्रोत: Open-Meteo',
+    envObservedLabel: 'अवलोकन',
+    envLoadingText: 'लोड हो रहा है…',
+    envErrorText: 'पर्यावरणीय डेटा अनुपलब्ध है',
+    envRetryText: 'पुनः प्रयास करें',
     operationalInputs: 'परिचालन इनपुट',
     workforce: 'कार्यबल',
     workersAvailable: 'उपलब्ध श्रमिक (व्यक्ति)',
@@ -208,6 +218,16 @@ function toOperationalInputs(form: ShortfallFormInputs): ShortfallOperationalInp
   return form as ShortfallOperationalInputs;
 }
 
+// Formats the backend's real observation timestamp (Open-Meteo's local
+// hourly timestamp, passed through unmodified by weather_service.py) for
+// display. Falls back to the raw string rather than a fabricated time if
+// it's ever unparseable.
+function formatObservedAt(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return parsed.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
 export const ShortfallView: React.FC<ShortfallViewProps> = ({ 
   initialReport,
   onSubBreadcrumbChange 
@@ -228,6 +248,51 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
   // empty - no demo/dummy numbers - the user must enter every value before
   // "Run shortfall assessment" is allowed to submit.
   const [inputs, setInputs] = useState<ShortfallFormInputs>(EMPTY_OPERATIONAL_INPUTS);
+
+  // Live Environmental Context bar (GET /api/environment/{pitId}) - fully
+  // separate from the shortfall prediction flow below. No fabricated
+  // default: starts empty, only ever populated from a real backend
+  // response.
+  const [envData, setEnvData] = useState<EnvironmentApiResponse | null>(null);
+  const [envLoading, setEnvLoading] = useState<boolean>(true);
+  const [envError, setEnvError] = useState<string | null>(null);
+
+  // Single fetch implementation, used by both the auto-fetch/polling effect
+  // below and the manual "Refresh" button. `cancelled` guards against a
+  // slow in-flight response (e.g. for a since-changed pit) overwriting
+  // state after a newer request has already resolved.
+  const fetchEnvironment = async (pitId: PitId, cancelledRef?: { current: boolean }) => {
+    setEnvLoading(true);
+    setEnvError(null);
+    const result = await api.getEnvironment(pitId);
+    if (cancelledRef?.current) return;
+    setEnvLoading(false);
+    if (result.ok) {
+      setEnvData(result.data);
+    } else {
+      // Never keep showing the previous pit's readings on failure, and
+      // never substitute a fake value - the UI must show "unavailable".
+      setEnvData(null);
+      setEnvError(result.message);
+    }
+  };
+
+  // Fetches on entering the Operational Inputs screen, re-fetches whenever
+  // the selected pit changes (never displays a stale/wrong pit's data),
+  // and polls every 5 minutes while this screen is active. One interval
+  // at a time - the cleanup function clears it before any re-run/unmount.
+  useEffect(() => {
+    if (step !== 'inputs') return;
+    const cancelledRef = { current: false };
+
+    fetchEnvironment(site.pitId, cancelledRef);
+    const intervalId = setInterval(() => fetchEnvironment(site.pitId, cancelledRef), ENVIRONMENT_REFRESH_MS);
+    return () => {
+      cancelledRef.current = true;
+      clearInterval(intervalId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, site.pitId]);
 
   // No client-side fake report generator: with every required field now
   // genuinely collected, a failed call means something real went wrong -
@@ -383,18 +448,39 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
             {st.backBtn}
           </button>
 
-          {/* Live Environmental Context Bar */}
+          {/* Live Environmental Context Bar - GET /api/environment/{pitId},
+              real Open-Meteo data via the same weather_service.py the
+              shortfall prediction itself uses. No fabricated fallback: on
+              error, every metric shows "unavailable", never a stale or
+              invented number. */}
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-subtle space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    envError ? 'bg-red-500' : envLoading ? 'bg-slate-300' : 'bg-emerald-500 animate-pulse'
+                  }`}
+                ></span>
                 <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                   {st.envContext}
                 </span>
               </div>
-              <div className="flex items-center gap-1 text-[11px] font-mono text-slate-500">
-                <Clock className="w-3 h-3 text-slate-400" />
-                <span>11:09:39 AM</span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 text-[11px] font-mono text-slate-500">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  <span>
+                    {envData ? formatObservedAt(envData.observed_at) : envLoading ? st.envLoadingText : '—'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchEnvironment(site.pitId)}
+                  disabled={envLoading}
+                  title={st.envRetryText}
+                  className="p-1 rounded-md text-slate-400 hover:text-brand-forest hover:bg-brand-mint-bg/50 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3 h-3 ${envLoading ? 'animate-spin' : ''}`} />
+                </button>
               </div>
             </div>
 
@@ -406,7 +492,11 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                   <span>{st.currentRainfall}</span>
                 </div>
                 <span className="text-base font-bold text-slate-900 font-mono">
-                  <AnimatedNumber value={12.5} decimals={1} />mm
+                  {envData ? (
+                    <><AnimatedNumber value={envData.rainfall_intensity_mm} decimals={1} />mm</>
+                  ) : (
+                    <span className="text-slate-400 text-xs font-sans">{envLoading ? st.envLoadingText : '—'}</span>
+                  )}
                 </span>
               </div>
 
@@ -416,7 +506,11 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                   <span>{st.rainfall72h}</span>
                 </div>
                 <span className="text-base font-bold text-slate-900 font-mono">
-                  <AnimatedNumber value={44} />mm
+                  {envData ? (
+                    <><AnimatedNumber value={envData.cumulative_rainfall_72h} decimals={1} />mm</>
+                  ) : (
+                    <span className="text-slate-400 text-xs font-sans">{envLoading ? st.envLoadingText : '—'}</span>
+                  )}
                 </span>
               </div>
 
@@ -426,7 +520,11 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                   <span>{st.soilMoisture}</span>
                 </div>
                 <span className="text-base font-bold text-slate-900 font-mono">
-                  <AnimatedNumber value={72} />%
+                  {envData ? (
+                    <><AnimatedNumber value={envData.soil_moisture_index} decimals={2} /></>
+                  ) : (
+                    <span className="text-slate-400 text-xs font-sans">{envLoading ? st.envLoadingText : '—'}</span>
+                  )}
                 </span>
               </div>
 
@@ -436,7 +534,11 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                   <span>{st.temperature}</span>
                 </div>
                 <span className="text-base font-bold text-slate-900 font-mono">
-                  <AnimatedNumber value={28.2} decimals={1} />°C
+                  {envData ? (
+                    <><AnimatedNumber value={envData.temperature_celsius} decimals={1} />°C</>
+                  ) : (
+                    <span className="text-slate-400 text-xs font-sans">{envLoading ? st.envLoadingText : '—'}</span>
+                  )}
                 </span>
               </div>
 
@@ -446,13 +548,30 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                   <span>{st.surfaceWater}</span>
                 </div>
                 <span className="text-xs font-bold text-slate-800 leading-tight block">
-                  {st.surfaceWaterDesc}
+                  {envData ? envData.surface_water_risk : envLoading ? st.envLoadingText : '—'}
                 </span>
               </div>
             </div>
 
-            <div className="text-[10px] text-slate-400 pt-1">
-              {st.envSource}
+            <div className="text-[10px] text-slate-400 pt-1 flex items-center justify-between gap-2">
+              {envError ? (
+                <span className="text-red-600 flex items-center gap-2">
+                  {st.envErrorText}
+                  <button
+                    type="button"
+                    onClick={() => fetchEnvironment(site.pitId)}
+                    className="underline hover:text-red-700 cursor-pointer"
+                  >
+                    {st.envRetryText}
+                  </button>
+                </span>
+              ) : envData ? (
+                <span>
+                  {st.envSourceLabel} · {st.envObservedLabel} {formatObservedAt(envData.observed_at)}
+                </span>
+              ) : (
+                <span>{st.envLoadingText}</span>
+              )}
             </div>
           </div>
 

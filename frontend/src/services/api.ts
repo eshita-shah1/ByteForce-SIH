@@ -101,6 +101,27 @@ export type ShortfallApiResult =
   | { ok: true; data: ShortfallApiResponse }
   | { ok: false; message: string };
 
+/** Mirrors backend app/schemas/environment.py's EnvironmentResponse exactly.
+ * Drives ShortfallView's "Live Environmental Context" bar only - separate
+ * from ShortfallApiResponse/the /api/shortfall prediction flow above. */
+export interface EnvironmentApiResponse {
+  success: boolean;
+  pit_id: string;
+  latitude: number;
+  longitude: number;
+  rainfall_intensity_mm: number;
+  cumulative_rainfall_72h: number;
+  soil_moisture_index: number;
+  temperature_celsius: number;
+  surface_water_risk: string;
+  observed_at: string;
+  source: string;
+}
+
+export type EnvironmentApiResult =
+  | { ok: true; data: EnvironmentApiResponse }
+  | { ok: false; message: string };
+
 export type UploadStatusResult =
   | { ok: true; data: UploadStatusApiResponse }
   | { ok: false; message: string };
@@ -221,6 +242,29 @@ export const api = {
       return { ok: false, message: body?.message || `Server error (${res.status}). Please try again.` };
     }
     return { ok: true, data: body as ShortfallApiResponse };
+  },
+
+  /**
+   * Fetch live environmental readings for a pit (GET /api/environment/{pitId})
+   * - drives ShortfallView's "Live Environmental Context" bar only. Separate
+   * from runShortfallAssessment() above: this never affects the prediction,
+   * shortfall/risk calculation, or corrective measures - it's a read-only
+   * display call backed by the same Open-Meteo integration.
+   */
+  async getEnvironment(pitId: string): Promise<EnvironmentApiResult> {
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE_URL}/environment/${encodeURIComponent(pitId)}`);
+    } catch (err) {
+      console.error('Backend environment endpoint unreachable:', err);
+      return { ok: false, message: 'Unable to reach the server. Please try again.' };
+    }
+
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { ok: false, message: body?.message || `Server error (${res.status}). Please try again.` };
+    }
+    return { ok: true, data: body as EnvironmentApiResponse };
   },
 
   /**
