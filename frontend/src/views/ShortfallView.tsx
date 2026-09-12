@@ -87,7 +87,6 @@ const ST = {
     targetExtraction: 'Target Extraction',
     shiftCrews: 'Shift Crews Active',
     haulageFleet: 'Haulage Fleet',
-    blastingScheduled: 'Blasting Scheduled',
     geologicalProfile: 'Geological Profile',
     contributingFactors: 'Key Contributing Shortfall Factors',
     impact: 'impact',
@@ -159,7 +158,6 @@ const ST = {
     targetExtraction: 'लक्षित निष्कर्षण',
     shiftCrews: 'सक्रिय शिफ्ट दल',
     haulageFleet: 'परिवहन बेड़ा',
-    blastingScheduled: 'ब्लास्टिंग निर्धारित',
     geologicalProfile: 'भूवैज्ञानिक प्रोफ़ाइल',
     contributingFactors: 'प्रमुख योगदानकर्ता कमी कारक',
     impact: 'प्रभाव',
@@ -945,12 +943,6 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                 <span className="text-slate-400 block text-[11px]">{st.haulageFleet}</span>
                 <span className="font-semibold text-slate-800 text-xs mt-0.5 block">
                   {report.submittedParameters.haulageFleet}
-                </span>
-              </div>
-              <div className="p-3 print:p-2 bg-slate-50/70 rounded-lg border border-slate-100 print:border-slate-200">
-                <span className="text-slate-400 block text-[11px]">{st.blastingScheduled}</span>
-                <span className="font-semibold text-slate-800 font-mono text-xs mt-0.5 block">
-                  {report.submittedParameters.blastingScheduled}
                 </span>
               </div>
             </div>

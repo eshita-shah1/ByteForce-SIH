@@ -90,7 +90,6 @@ export interface ShortfallReportData {
     targetExtraction: string;
     shiftCrewsActive: string;
     haulageFleet: string;
-    blastingScheduled: string;
     geologicalProfile: string;
   };
   contributingFactors: Array<{

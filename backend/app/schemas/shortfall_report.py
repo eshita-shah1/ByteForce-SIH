@@ -29,7 +29,6 @@ class ShortfallReportSubmittedParameters(BaseModel):
     target_extraction: str = Field(alias="targetExtraction")
     shift_crews_active: str = Field(alias="shiftCrewsActive")
     haulage_fleet: str = Field(alias="haulageFleet")
-    blasting_scheduled: str = Field(alias="blastingScheduled")
     geological_profile: str = Field(alias="geologicalProfile")
 
 

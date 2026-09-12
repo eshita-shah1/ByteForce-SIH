@@ -83,12 +83,12 @@ def test_contributing_factor_weights_sum_to_100_percent():
 
 
 def test_unmodeled_fields_are_honestly_labeled_not_fabricated():
-    """water_table_depth/risk and haul_road_status/slippage were removed
-    from ShortfallReportEnvironmental entirely (and from the frontend's
-    Hydrology/Logistics cards) rather than kept as permanent "not modeled"
-    placeholders - v2 has no such features at all. The remaining fields
-    that genuinely have no source (lightning_risk, blasting_scheduled) are
-    still honestly labeled, not fabricated."""
+    """water_table_depth/risk, haul_road_status/slippage, and
+    blasting_scheduled were removed entirely (from the backend schemas and
+    the frontend's Hydrology/Logistics cards and Submitted Parameters grid)
+    rather than kept as permanent "not modeled" placeholders - v2 has no
+    such features at all. lightning_risk is the one remaining field with
+    genuinely no source, and is still honestly labeled, not fabricated."""
     request = _valid_request()
     response = _response_with_measures(
         CorrectiveMeasure(factor="none", severity="low", action="x", reason="y")
@@ -98,9 +98,9 @@ def test_unmodeled_fields_are_honestly_labeled_not_fabricated():
 
     assert "not modeled" in report.environmental.lightning_risk.lower()
     assert "not assessed" in report.submitted_parameters.geological_profile.lower()
-    assert "not modeled" in report.submitted_parameters.blasting_scheduled.lower()
     assert not hasattr(report.environmental, "water_table_depth")
     assert not hasattr(report.environmental, "haul_road_status")
+    assert not hasattr(report.submitted_parameters, "blasting_scheduled")
 
 
 def test_corrective_measures_are_passed_through_verbatim():

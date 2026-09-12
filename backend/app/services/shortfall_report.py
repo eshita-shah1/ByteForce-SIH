@@ -2,18 +2,17 @@
 POST /api/shortfall's optional `report` field) from real ShortfallRequest/
 ShortfallResponse values only.
 
-v2 model note: blasting scheduling is no longer a Model 2 feature (see
-app.ml.model2.feature_schema) - that report slot is labeled "not modeled"
-rather than invented, same as lightning risk (which never had a source).
-Water-table depth/risk and haul-road status/slippage were dropped from
-ShortfallReportEnvironmental entirely (and from the frontend's Hydrology/
-Logistics cards) rather than kept around as permanent "not modeled"
-placeholders - v2 has no such features at all, so there was nothing for
-those slots to ever report. The "climate" slot surfaces soil_moisture_index
-(a real, still-present feature) instead of the removed
-land_surface_temperature_c. Everything else is either a direct pass-through
-of a real value, or a deterministic derivation from one (documented inline)
-- never a fabricated fact.
+v2 model note: water-table depth/risk, haul-road status/slippage, and
+blasting-schedule were all dropped entirely (from ShortfallReportEnvironmental/
+ShortfallReportSubmittedParameters and from the frontend cards/fields that
+displayed them) rather than kept around as permanent "not modeled"
+placeholders - v2's Model 2 pipeline has no such features at all, so there
+was nothing for those slots to ever report. lightning_risk is the one
+remaining "not modeled" slot (no source ever existed for it, in v1 or v2).
+The "climate" slot surfaces soil_moisture_index (a real, still-present
+feature) instead of the removed land_surface_temperature_c. Everything else
+is either a direct pass-through of a real value, or a deterministic
+derivation from one (documented inline) - never a fabricated fact.
 """
 from __future__ import annotations
 
@@ -98,7 +97,6 @@ def build_shortfall_report(request: ShortfallRequest, response: ShortfallRespons
             target_extraction=f"{response.target_production_tonnes:,.0f} tonnes",
             shift_crews_active=f"{request.workers_available} workers available ({request.shift_type.replace('_', ' ')})",
             haulage_fleet=f"{request.dump_trucks_operational} dump trucks operational",
-            blasting_scheduled=_NOT_MODELED,
             geological_profile="Not assessed by this model (Module 2 is operational, not geological - see Module 1 / prospectivity for that).",
         ),
         contributing_factors=contributing_factors,
