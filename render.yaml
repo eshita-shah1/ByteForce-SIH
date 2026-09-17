@@ -32,6 +32,13 @@ services:
           name: manganese-gis-db
           property: connectionString
       - key: CORS_ORIGINS
+        # Placeholder - once the static frontend site below is created,
+        # Render assigns it a live *.onrender.com URL (not necessarily
+        # matching the `name:` here, e.g. the backend itself ended up at
+        # byteforce-sih-1.onrender.com rather than manganese-mining-backend).
+        # Update this to that real URL in the Render dashboard (backend
+        # service > Environment) and redeploy, or the frontend's requests
+        # will be blocked by CORS.
         value: https://your-frontend.example.com
       - key: ADMIN_USERNAME
         value: admin
@@ -43,3 +50,25 @@ services:
         value: "200"
       - key: UPLOAD_TTL_HOURS
         value: "24"
+
+  # Static frontend (Vite/React build). Documented here for reproducibility -
+  # if the backend above was created by hand in the Render dashboard rather
+  # than via "New Blueprint", this entry won't auto-apply; create the static
+  # site the same way (New + > Static Site > same repo/branch) using the
+  # settings below, since that's the path already proven to work for the
+  # backend in this project.
+  - type: web
+    name: manganese-mining-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      # Baked into the build at build time (Vite inlines VITE_* vars) -
+      # points the frontend at the already-deployed backend.
+      - key: VITE_API_BASE_URL
+        value: https://byteforce-sih-1.onrender.com/api
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

@@ -55,6 +55,13 @@ be updated before the two are wired together end-to-end.
 ## Deployment
 - `render.yaml` builds the backend from `backend/Dockerfile` with
   `dockerContext: ./backend` (Render blueprint, repo-root `render.yaml`).
+  Deployed at https://byteforce-sih-1.onrender.com (2026-09-18).
+- `render.yaml` also documents a static-site config for the frontend
+  (`rootDir: frontend`, `npm install && npm run build`, publish `dist`) -
+  create it in the Render dashboard (New + > Static Site, same repo/branch)
+  the same way the backend service was created, since it wasn't set up via
+  Blueprint sync. Set `VITE_API_BASE_URL` to the backend URL above at build
+  time, then update the backend's `CORS_ORIGINS` env var to the frontend's
+  resulting `*.onrender.com` URL and redeploy the backend.
 - `docker-compose.yml` (repo root) builds the backend from `./backend` and
   brings up a local Postgres+PostGIS db.
-- Frontend deploy target (Vercel/Netlify/static host) is not yet configured.
