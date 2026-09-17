@@ -2,7 +2,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -25,6 +25,27 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="postgresql+psycopg://postgres:postgres@localhost:5432/manganese_gis"
     )
+
+    @field_validator("database_url")
+    @classmethod
+    def _ensure_psycopg3_driver(cls, v: str) -> str:
+        """Render's managed Postgres (like most providers' connection
+        strings) is a bare `postgresql://...` URL with no driver specified.
+        SQLAlchemy's default driver for that scheme is psycopg2 - but
+        requirements.txt only installs psycopg[binary]==3.2.3 (psycopg v3),
+        not psycopg2/psycopg2-binary - so an un-normalized URL crashes
+        create_engine() at import time with "ModuleNotFoundError: No module
+        named 'psycopg2'" (confirmed 2026-09-18: this is exactly what broke
+        the Render deploy). Rewrite bare postgres:// / postgresql:// URLs to
+        explicitly select the psycopg (v3) driver; a URL that already names
+        a driver (postgresql+psycopg://, postgresql+asyncpg://, etc.) is
+        left untouched.
+        """
+        if v.startswith("postgres://"):
+            return "postgresql+psycopg://" + v[len("postgres://"):]
+        if v.startswith("postgresql://"):
+            return "postgresql+psycopg://" + v[len("postgresql://"):]
+        return v
 
     # --- Model artifacts ---
     model1_dir: Path = MODELS_DIR
