@@ -10,7 +10,10 @@ import {
   FileDown,
   RotateCcw,
   Layers,
-  RefreshCw
+  RefreshCw,
+  Wind,
+  TrendingUp,
+  TrendingDown
 } from 'lucide-react';
 import { api, EnvironmentApiResponse } from '../services/api';
 import { PitId, ShiftType, ShortfallOperationalInputs, ShortfallReportData, ShortfallSiteInfo } from '../types';
@@ -38,6 +41,7 @@ const ST = {
     rainfall72h: 'RAINFALL (72H)',
     soilMoisture: 'SOIL MOISTURE',
     temperature: 'TEMPERATURE',
+    humidity: 'HUMIDITY',
     surfaceWater: 'SURFACE WATER',
     envSourceLabel: 'Source: Open-Meteo',
     envObservedLabel: 'Observed',
@@ -52,13 +56,15 @@ const ST = {
     excavatorsAvailable: 'Excavators Available (units)',
     dumpTrucksOperational: 'Dump Trucks Operational (units)',
     plannedHours: 'Planned Operating Hours (hrs)',
+    equipmentDowntimeHours: 'Equipment Downtime (hrs)',
+    dumperCycleTimeMinutes: 'Dumper Cycle Time (minutes)',
     environmentalHistory: 'ENVIRONMENTAL & PRODUCTION HISTORY',
     surfaceWaterPoolingPct: 'Surface Water Pooling (%)',
     previousShiftProduction: 'Previous Shift Production (tonnes)',
     previousDayProduction: 'Previous Day Production (tonnes)',
     tonnage: 'TONNAGE',
     expectedTonnage: 'Target Production (tonnes/shift)',
-    tonnageHelp: 'Enter a value between 500 and 700 tonnes/shift, the model\'s best-behaved operating range.',
+    tonnageHelp: 'Enter a value between 400 and 600 tonnes/shift, matching the model\'s training data range.',
     runAssessment: 'Run shortfall assessment',
 
     // Screen 3 Report
@@ -91,6 +97,11 @@ const ST = {
     contributingFactors: 'Key Contributing Shortfall Factors',
     impact: 'impact',
     correctiveMeasures: 'Recommended Corrective Measures',
+    modelExplanationTitle: 'Why did the model produce this result?',
+    modelExplanationDesc: 'Real SHAP feature contributions from Model 2 (v3) for this exact prediction - not a general explanation, specific to the inputs submitted above.',
+    increasesPrediction: 'increases predicted output',
+    decreasesPrediction: 'decreases predicted output',
+    modelExplanationUnavailable: 'Model explanation is unavailable for this run (the explainer did not load on the server).',
   },
   hi: {
     initTitle: 'कमी मॉडल प्रारंभ करें',
@@ -109,6 +120,7 @@ const ST = {
     rainfall72h: 'वर्षा (72 घंटे)',
     soilMoisture: 'मिट्टी की नमी',
     temperature: 'तापमान',
+    humidity: 'आर्द्रता',
     surfaceWater: 'सतही जल',
     envSourceLabel: 'स्रोत: Open-Meteo',
     envObservedLabel: 'अवलोकन',
@@ -123,13 +135,15 @@ const ST = {
     excavatorsAvailable: 'उपलब्ध उत्खनक (इकाइयां)',
     dumpTrucksOperational: 'परिचालन डंप ट्रक (इकाइयां)',
     plannedHours: 'नियोजित परिचालन घंटे (घंटे)',
+    equipmentDowntimeHours: 'उपकरण डाउनटाइम (घंटे)',
+    dumperCycleTimeMinutes: 'डंपर चक्र समय (मिनट)',
     environmentalHistory: 'पर्यावरणीय और उत्पादन इतिहास',
     surfaceWaterPoolingPct: 'सतही जल जमाव (%)',
     previousShiftProduction: 'पिछली शिफ्ट उत्पादन (टन)',
     previousDayProduction: 'पिछले दिन का उत्पादन (टन)',
     tonnage: 'टन भार',
     expectedTonnage: 'लक्षित उत्पादन (टन/शिफ्ट)',
-    tonnageHelp: '500 से 700 टन/शिफ्ट के बीच मान दर्ज करें, जो मॉडल के लिए सबसे उपयुक्त परिचालन सीमा है।',
+    tonnageHelp: '400 से 600 टन/शिफ्ट के बीच मान दर्ज करें, जो मॉडल के प्रशिक्षण डेटा की सीमा से मेल खाता है।',
     runAssessment: 'कमी मूल्यांकन चलाएं',
 
     // Screen 3 Report
@@ -162,6 +176,11 @@ const ST = {
     contributingFactors: 'प्रमुख योगदानकर्ता कमी कारक',
     impact: 'प्रभाव',
     correctiveMeasures: 'अनुशंसित सुधारात्मक उपाय',
+    modelExplanationTitle: 'मॉडल ने यह परिणाम क्यों दिया?',
+    modelExplanationDesc: 'इस सटीक पूर्वानुमान के लिए मॉडल 2 (v3) से वास्तविक SHAP फीचर योगदान - एक सामान्य व्याख्या नहीं, बल्कि ऊपर सबमिट किए गए इनपुट के लिए विशिष्ट।',
+    increasesPrediction: 'अनुमानित उत्पादन बढ़ाता है',
+    decreasesPrediction: 'अनुमानित उत्पादन घटाता है',
+    modelExplanationUnavailable: 'इस रन के लिए मॉडल व्याख्या अनुपलब्ध है (एक्सप्लेनर सर्वर पर लोड नहीं हुआ)।',
   },
 } as const;
 
@@ -182,6 +201,8 @@ const EMPTY_OPERATIONAL_INPUTS: ShortfallFormInputs = {
   excavatorsAvailable: '',
   dumpTrucksOperational: '',
   plannedOperatingHours: '',
+  equipmentDowntimeHours: '',
+  dumperCycleTimeMinutes: '',
   targetProductionTonnes: '',
   surfaceWaterPoolingPct: '',
   previousShiftProductionTonnes: '',
@@ -496,7 +517,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
             </div>
 
             {/* Environmental Metric Tiles */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 pt-1">
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                 <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mb-1">
                   <CloudRain className="w-3 h-3 text-brand-forest" />
@@ -547,6 +568,20 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                 <span className="text-base font-bold text-slate-900 font-mono">
                   {envData ? (
                     <><AnimatedNumber value={envData.temperature_celsius} decimals={1} />°C</>
+                  ) : (
+                    <span className="text-slate-400 text-xs font-sans">{envLoading ? st.envLoadingText : '—'}</span>
+                  )}
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mb-1">
+                  <Wind className="w-3 h-3 text-brand-forest" />
+                  <span>{st.humidity}</span>
+                </div>
+                <span className="text-base font-bold text-slate-900 font-mono">
+                  {envData ? (
+                    <><AnimatedNumber value={envData.humidity_pct} decimals={0} />%</>
                   ) : (
                     <span className="text-slate-400 text-xs font-sans">{envLoading ? st.envLoadingText : '—'}</span>
                   )}
@@ -678,6 +713,36 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                     />
                     <span className="text-[10px] text-slate-400 mt-1 block">0–24</span>
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                      {st.equipmentDowntimeHours}
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      step="0.1"
+                      value={inputs.equipmentDowntimeHours}
+                      onChange={(e) => setInputs({ ...inputs, equipmentDowntimeHours: parseFloatOrEmpty(e.target.value) })}
+                      className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                      {st.dumperCycleTimeMinutes}
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      step="0.1"
+                      value={inputs.dumperCycleTimeMinutes}
+                      onChange={(e) => setInputs({ ...inputs, dumperCycleTimeMinutes: parseFloatOrEmpty(e.target.value) })}
+                      className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -711,7 +776,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                       type="number"
                       required
                       min={0}
-                      max={200}
+                      max={600}
                       value={inputs.previousShiftProductionTonnes}
                       onChange={(e) => setInputs({ ...inputs, previousShiftProductionTonnes: parseFloatOrEmpty(e.target.value) })}
                       className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
@@ -746,8 +811,8 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                 <input
                   type="number"
                   required
-                  min={500}
-                  max={700}
+                  min={400}
+                  max={600}
                   value={inputs.targetProductionTonnes}
                   onChange={(e) => setInputs({ ...inputs, targetProductionTonnes: parseIntOrEmpty(e.target.value) })}
                   className="w-full max-w-xs px-3.5 py-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-forest focus:outline-none"
@@ -970,6 +1035,49 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* 4.5. Model Explanation - real SHAP output for this exact
+              prediction, distinct from the rule-based Contributing Factors
+              card above. Never claims certainty - see disclaimer below. */}
+          <div className="bg-white p-6 print:p-3.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle space-y-4 print:space-y-1.5 break-inside-avoid print:mt-2">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 tracking-tight">
+                {st.modelExplanationTitle}
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-1">
+                {st.modelExplanationDesc}
+              </p>
+            </div>
+            {report.modelExplanation && report.modelExplanation.length > 0 ? (
+              <div className="divide-y divide-slate-100 print:divide-slate-200">
+                {report.modelExplanation.map((factor, idx) => {
+                  const increases = factor.direction === 'increases_prediction';
+                  return (
+                    <div key={idx} className="py-3 print:py-1.5 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${increases ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                          {increases ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-800">
+                            {factor.feature.replace(/_/g, ' ')}
+                          </h4>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            {increases ? st.increasesPrediction : st.decreasesPrediction} · value: {factor.value}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`text-xs font-bold font-mono shrink-0 ${increases ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {increases ? '+' : ''}{factor.shapValue.toFixed(2)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">{st.modelExplanationUnavailable}</p>
+            )}
           </div>
 
           {/* 5. Recommended Corrective Measures */}

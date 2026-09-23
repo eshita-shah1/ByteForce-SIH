@@ -40,6 +40,21 @@ class ShortfallReportContributingFactor(BaseModel):
     impact_percent: int = Field(alias="impactPercent")
 
 
+class ShortfallReportShapFactor(BaseModel):
+    """One real SHAP contribution for this exact prediction (see
+    ShortfallResponse.shap_explanation) - distinct from
+    ShortfallReportContributingFactor above, which is the rule-based
+    corrective-measure engine's severity-weighted display, not a model-
+    computed value."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    feature: str
+    value: float
+    shap_value: float = Field(alias="shapValue")
+    direction: str
+
+
 class ShortfallReportData(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -48,6 +63,7 @@ class ShortfallReportData(BaseModel):
     coordinates: ShortfallReportCoordinates
     computed_ago: str = Field(alias="computedAgo")
     timestamp: str
+    model_version: str = Field(alias="modelVersion")
     expected_shortfall_percent: float = Field(alias="expectedShortfallPercent")
     risk_level: Literal["LOW", "MODERATE RISK", "HIGH RISK"] = Field(alias="riskLevel")
     target_production_tonnes: float = Field(alias="targetProductionTonnes")
@@ -57,3 +73,6 @@ class ShortfallReportData(BaseModel):
     submitted_parameters: ShortfallReportSubmittedParameters = Field(alias="submittedParameters")
     contributing_factors: list[ShortfallReportContributingFactor] = Field(alias="contributingFactors")
     corrective_measures: list[str] = Field(alias="correctiveMeasures")
+    # Real SHAP output, top features by |shap_value| - None only if the
+    # explainer failed to load. Additive.
+    model_explanation: list[ShortfallReportShapFactor] | None = Field(default=None, alias="modelExplanation")

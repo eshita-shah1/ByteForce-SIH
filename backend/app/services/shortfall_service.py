@@ -1,39 +1,36 @@
 from __future__ import annotations
 
-import datetime as dt
 import logging
 
 from app.core.config import Settings
-from app.ml.model2.feature_schema import LIVE_SOURCEABLE_FEATURES, NUMERIC_FEATURES
-from app.schemas.shortfall import ShortfallRequest, ShortfallResponse
+from app.ml.model2.feature_schema import LIVE_SOURCEABLE_FEATURES
+from app.schemas.shortfall import ShapContribution, ShortfallRequest, ShortfallResponse
 from app.services.external_data_service import resolve_environment_features
 from app.services.model2_service import model2_service
 from app.services.recommendation_service import build_recommendations, calculate_risk
 
 logger = logging.getLogger("app.shortfall")
 
-# Model 2's raw XGBRegressor output is NOT on the same scale as real
-# actual_production_tonnes: confirmed 2026-09-12 against a real 5,000-row
-# historical production dataset with genuine outcomes (data/
-# model2_real_production_calibration.csv - see the identically-named
-# artifact hash-verified as this exact deployed .pkl). The raw output is
-# centered near 0 (mean 0.6, std 81.3 tonnes across all 5,000 real rows)
-# while real production is centered near 421.8 (std 92.4) - the signature
-# of a target-mean-centering transform applied during training whose
-# inverse was never included in the exported pipeline (no
-# TransformedTargetRegressor wrapper exists in this artifact - verified
-# directly). Adding this constant back recovers the model's real-world
-# scale: MAE against real outcomes drops from ~421 tonnes (raw, unusable)
-# to ~18.6 tonnes on an 80/20 train/holdout split fit strictly on the
-# 80% (not the same rows being scored), with 0 negative predictions
-# (vs. 46% of the same 5,000 rows negative when raw). The constant is
-# stable across pits (419.8-422.1) and shifts (420.3-422.4) - a global
-# offset, not something needing per-pit tuning. See
-# backend/tests/test_shortfall_service.py for the reproducible
-# recomputation of this constant and its validated accuracy, run against
-# the same checked-in dataset every test run (not a magic number frozen
-# here with no way to re-derive or falsify it).
-MODEL2_TARGET_RECENTERING_TONNES = 421.19
+# Model 2 v3's raw XGBRegressor output is NOT on the same scale as real
+# actual_production_tonnes - same "target-mean-centering transform with no
+# inverse in the exported artifact" signature as the retired v2 model, just
+# a different constant. Re-derived 2026-09-22 against
+# backend/data/model2_training_dataset_v2.csv (5,000 rows, the training
+# dataset shipped alongside this exact model2_xgboost_production.pkl -
+# columns match its 15 required features exactly): raw output is centered
+# near 0 (mean 0.26, std 58.6 across all 5,000 rows) while real
+# actual_production_tonnes is centered near 498.8 (std 57.6). Fitting the
+# constant on an 80% split and evaluating on the untouched 20% holdout:
+# MAE drops from 425.1 tonnes (raw, unusable) to 7.9 tonnes, with 0
+# negative corrected predictions in the holdout (and 0 across all 5,000
+# rows). The constant is stable across pits (424.9-425.8) and shifts
+# (425.3-425.5) - a global offset, not something needing per-pit tuning.
+# See backend/tests/test_shortfall_service.py for the reproducible
+# recomputation of this constant against the same checked-in dataset,
+# mirroring the methodology used for the retired v2 constant (421.19) -
+# these are NOT the same constant and must not be conflated; each is
+# specific to its own artifact.
+MODEL2_TARGET_RECENTERING_TONNES = 425.49
 
 
 async def predict_shortfall(request: ShortfallRequest, settings: Settings) -> ShortfallResponse:
@@ -41,10 +38,6 @@ async def predict_shortfall(request: ShortfallRequest, settings: Settings) -> Sh
 
     env_values, env_sources = await resolve_environment_features(request_dict, settings)
     request_dict.update(env_values)
-
-    timestamp = dt.datetime.fromisoformat(request.timestamp.replace("Z", "+00:00"))
-    request_dict["month"] = timestamp.month
-    request_dict["day_of_week"] = timestamp.weekday()
 
     raw_prediction = model2_service.predict(request_dict)
 
@@ -82,14 +75,27 @@ async def predict_shortfall(request: ShortfallRequest, settings: Settings) -> Sh
 
     causes, measures = build_recommendations(request_dict)
 
+    # feature_sources covers the model's actual 15 required columns (order/
+    # names loaded from models/model2_features.json by model2_service - see
+    # its docstring), plus pit_id/shift_type (still real request fields,
+    # always user-supplied, even though the v3 model no longer consumes
+    # them), plus rainfall_intensity_mm specifically: it's live-sourceable
+    # and still resolved every request for recommendation_service.py's rain
+    # rule and the "Live Environmental Context" bar, but it is NOT one of
+    # v3's 15 model columns, so it wouldn't otherwise appear here.
     feature_sources: dict[str, str] = {"shift_type": "user", "pit_id": "user"}
-    for field in NUMERIC_FEATURES:
+    for field in set(model2_service.feature_columns) | LIVE_SOURCEABLE_FEATURES:
         if field in LIVE_SOURCEABLE_FEATURES:
             feature_sources[field] = env_sources.get(field, "user")
         else:
             feature_sources[field] = "user"
-    feature_sources["month"] = "derived_from_timestamp"
-    feature_sources["day_of_week"] = "derived_from_timestamp"
+
+    # Real SHAP output for this exact request - never fabricated; None only
+    # if the explainer failed to load (see model2_service.py).
+    shap_contributions = model2_service.explain(request_dict)
+    shap_explanation = (
+        [ShapContribution(**c) for c in shap_contributions] if shap_contributions is not None else None
+    )
 
     return ShortfallResponse(
         pit_id=request.pit_id,
@@ -102,4 +108,5 @@ async def predict_shortfall(request: ShortfallRequest, settings: Settings) -> Sh
         primary_causes=causes,
         corrective_measures=measures,
         feature_sources=feature_sources,
+        shap_explanation=shap_explanation,
     )

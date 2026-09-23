@@ -53,8 +53,15 @@ class Settings(BaseSettings):
     model1_model_path: Path = MODELS_DIR / "xgboost_manganese_model.pkl"
     model1_config_path: Path = MODELS_DIR / "model_config.json"
 
+    # Retained ONLY for the legacy comparison path (app/services/
+    # model2_service_v2_legacy.py) - live traffic no longer loads these.
     model2_pipeline_path: Path = MODELS_DIR / "MOIL_Module2_Final_Model.pkl"
     model2_pipeline_fallback_path: Path = MODELS_DIR / "moil_production_pipeline.pkl"
+
+    # --- Model 2 "v3" (2026-09-22 deployment package) - the live artifact ---
+    model2_v3_model_path: Path = MODELS_DIR / "model2_xgboost_production.pkl"
+    model2_v3_explainer_path: Path = MODELS_DIR / "model2_shap_explainer.pkl"
+    model2_v3_features_path: Path = MODELS_DIR / "model2_features.json"
 
     study_boundary_geojson_path: Path = DATA_DIR / "study_boundary.geojson"
 

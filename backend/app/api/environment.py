@@ -39,6 +39,7 @@ async def get_environment(pit_id: str, settings: Settings = Depends(get_settings
         cumulative_rainfall_72h=live["cumulative_rainfall_72h"],
         soil_moisture_index=live["soil_moisture_index"],
         temperature_celsius=live["temperature_celsius"],
+        humidity_pct=live["humidity_pct"],
         surface_water_risk=classify_surface_water_risk(
             live["rainfall_intensity_mm"], live["cumulative_rainfall_72h"]
         ),

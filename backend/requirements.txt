@@ -28,6 +28,14 @@ xgboost==2.1.4
 joblib==1.4.2
 pandas==2.2.3
 numpy==1.26.4
+# shap: added 2026-09-22 for Model 2 v3's explainer (model2_shap_explainer.pkl
+# - a shap.explainers.TreeExplainer). Loading + shap_values() against the
+# real artifact was verified in an ad-hoc environment with newer shap/numpy/
+# pandas (0.51.0 / 2.4.4 / 3.0.2) since this project's own pinned numpy
+# 1.26.4/pandas 2.2.3 venv wasn't available in that session - re-verify this
+# exact pin (a full `pip install -r requirements.txt` + the model2_service
+# SHAP tests) against the real pinned stack above before deploying.
+shap==0.46.0
 
 # --- HTTP client (external weather/soil API) ---
 httpx==0.28.1

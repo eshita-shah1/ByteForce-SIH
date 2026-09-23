@@ -81,7 +81,7 @@ export type UploadCreateResult =
   | { ok: true; data: UploadCreateApiResponse }
   | { ok: false; message: string };
 
-/** Mirrors backend app/schemas/shortfall.py's ShortfallResponse exactly (v2 model). */
+/** Mirrors backend app/schemas/shortfall.py's ShortfallResponse exactly (v3 model, 2026-09-22). */
 export interface ShortfallApiResponse {
   success: boolean;
   pit_id: string;
@@ -94,6 +94,13 @@ export interface ShortfallApiResponse {
   primary_causes: string[];
   corrective_measures: Array<{ factor: string; severity: string; action: string; reason: string }>;
   feature_sources: Record<string, string>;
+  model_version: string;
+  shap_explanation: Array<{
+    feature: string;
+    value: number;
+    shap_value: number;
+    direction: 'increases_prediction' | 'decreases_prediction';
+  }> | null;
   report: ShortfallReportData | null;
 }
 
@@ -113,6 +120,7 @@ export interface EnvironmentApiResponse {
   cumulative_rainfall_72h: number;
   soil_moisture_index: number;
   temperature_celsius: number;
+  humidity_pct: number;
   surface_water_risk: string;
   observed_at: string;
   source: string;
@@ -199,12 +207,13 @@ export const api = {
   },
 
   /**
-   * Run Shortfall Forecaster Model via backend (POST /api/shortfall) - v2
-   * model. Every field the backend actually requires is now collected by
-   * ShortfallView, so this sends the real, complete request (no fields left
-   * out, none invented). rainfall_intensity_mm/cumulative_rainfall_72h/
-   * soil_moisture_index are intentionally omitted - the backend auto-fetches
-   * them from the live weather API when not supplied.
+   * Run Shortfall Forecaster Model via backend (POST /api/shortfall) - v3
+   * model (2026-09-22). Every field the backend actually requires is now
+   * collected by ShortfallView, so this sends the real, complete request
+   * (no fields left out, none invented). rainfall_intensity_mm/
+   * cumulative_rainfall_72h/soil_moisture_index/humidity_pct/
+   * land_surface_temperature_c are intentionally omitted - the backend
+   * auto-fetches them from the live weather API when not supplied.
    */
   async runShortfallAssessment(
     site: ShortfallSiteInfo,
@@ -222,6 +231,8 @@ export const api = {
         workers_available: inputs.workersAvailable,
         excavators_available: inputs.excavatorsAvailable,
         dump_trucks_operational: inputs.dumpTrucksOperational,
+        equipment_downtime_hours: inputs.equipmentDowntimeHours,
+        dumper_cycle_time_minutes: inputs.dumperCycleTimeMinutes,
         surface_water_pooling_pct: inputs.surfaceWaterPoolingPct,
         previous_shift_production_tonnes: inputs.previousShiftProductionTonnes,
         previous_day_production_tonnes: inputs.previousDayProductionTonnes,

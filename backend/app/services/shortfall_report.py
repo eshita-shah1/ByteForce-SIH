@@ -13,6 +13,14 @@ The "climate" slot surfaces soil_moisture_index (a real, still-present
 feature) instead of the removed land_surface_temperature_c. Everything else
 is either a direct pass-through of a real value, or a deterministic
 derivation from one (documented inline) - never a fabricated fact.
+
+v3 model note (2026-09-22): land_surface_temperature_c and humidity_pct
+are back as real v3 inputs (see app/ml/model2/feature_schema.py), but the
+"climate" slot's wording is left as-is (still soil moisture) rather than
+restructured, since it remains accurate and existing frontend/tests key on
+it. Both new fields are covered instead by model_explanation (real SHAP
+output, added below) when they're among the top contributing features for
+a given prediction.
 """
 from __future__ import annotations
 
@@ -26,6 +34,7 @@ from app.schemas.shortfall_report import (
     ShortfallReportCoordinates,
     ShortfallReportData,
     ShortfallReportEnvironmental,
+    ShortfallReportShapFactor,
     ShortfallReportSubmittedParameters,
 )
 
@@ -76,12 +85,19 @@ def build_shortfall_report(request: ShortfallRequest, response: ShortfallRespons
         for measure, weight in zip(response.corrective_measures, weights)
     ]
 
+    model_explanation = (
+        [ShortfallReportShapFactor(**c.model_dump()) for c in response.shap_explanation]
+        if response.shap_explanation is not None
+        else None
+    )
+
     return ShortfallReportData(
         id=uuid.uuid4().hex,
         site_name=_humanize(request.pit_id),
         coordinates=ShortfallReportCoordinates(lat=lat, lng=lng),
         computed_ago="Just now",
         timestamp=dt.datetime.utcnow().isoformat(),
+        model_version=response.model_version,
         expected_shortfall_percent=response.shortfall_percentage,
         risk_level=_RISK_LEVEL_MAP[response.risk],
         target_production_tonnes=response.target_production_tonnes,
@@ -101,4 +117,5 @@ def build_shortfall_report(request: ShortfallRequest, response: ShortfallRespons
         ),
         contributing_factors=contributing_factors,
         corrective_measures=[m.action for m in response.corrective_measures],
+        model_explanation=model_explanation,
     )

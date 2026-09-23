@@ -43,6 +43,7 @@ def test_valid_pit_id_returns_environment_shape():
         "cumulative_rainfall_72h",
         "soil_moisture_index",
         "temperature_celsius",
+        "humidity_pct",
     ):
         assert isinstance(body[field], (int, float))
     assert body["surface_water_risk"] in (

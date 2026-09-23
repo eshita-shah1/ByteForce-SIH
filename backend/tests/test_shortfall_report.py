@@ -21,6 +21,8 @@ def _valid_request(**overrides) -> ShortfallRequest:
         "workers_available": 48,
         "previous_shift_production_tonnes": 85,
         "previous_day_production_tonnes": 170,
+        "equipment_downtime_hours": 1.5,
+        "dumper_cycle_time_minutes": 18.0,
     }
     payload.update(overrides)
     return ShortfallRequest(**payload)

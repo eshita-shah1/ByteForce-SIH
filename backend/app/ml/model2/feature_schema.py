@@ -1,4 +1,24 @@
-"""Model 2 (production shortfall) feature schema - v2 artifact.
+"""Model 2 (production shortfall) shared site metadata, plus the RETIRED v2
+artifact's feature schema (see app/services/model2_service_v2_legacy.py).
+
+2026-09-22: the live model is now "v3" (app/services/model2_service.py -
+model2_xgboost_production.pkl + model2_shap_explainer.pkl +
+model2_features.json). Its 15 feature names/order are loaded directly from
+model2_features.json at service-load time (not duplicated here) since that
+file is the artifact's own shipped spec and was verified to match the
+model's feature_names_in_ exactly - see model2_service.py's docstring. The
+4 fields below that v3 needs but v2 didn't are listed here only for
+reference/tests; they are not re-derived or hardcoded into a second
+"raw feature columns" list for v3.
+
+PIT_COORDINATES, CATEGORICAL_FEATURES, and LIVE_SOURCEABLE_FEATURES remain
+shared infrastructure used regardless of which Model 2 artifact is live:
+site selection/validation and the "Live Environmental Context" bar
+(app/api/environment.py) don't change with the model swap, and
+LIVE_SOURCEABLE_FEATURES governs what app/services/external_data_service.py
+resolves for ANY caller, not just Model 2's own predict() input.
+
+--- v2 (retired) schema notes below, for the legacy comparison path only ---
 
 The v1 artifact (models/backup_v1_shortfall_model/) was replaced with a new
 Model 2 pipeline ("Model 2 Moil.pkl", copied in as both
@@ -70,12 +90,29 @@ RAW_FEATURE_COLUMNS: list[str] = (
 
 # Which fields plausibly have a live external-data source (weather/soil) vs.
 # which must always come from the user. See services/external_data_service.py.
-# land_surface_temperature_c is gone in v2, so it's dropped from this set too.
+# rainfall_intensity_mm/cumulative_rainfall_72h/soil_moisture_index are kept
+# even though the live v3 model doesn't consume rainfall_intensity_mm itself
+# (recommendation_service.py's rain rule and the "Live Environmental
+# Context" bar still do). humidity_pct and land_surface_temperature_c were
+# added 2026-09-22 for the v3 model - Open-Meteo already had the
+# temperature reading (previously display-only, see weather_service.py);
+# relative_humidity_2m was newly added to that same request.
 LIVE_SOURCEABLE_FEATURES: set[str] = {
     "rainfall_intensity_mm",
     "cumulative_rainfall_72h",
     "soil_moisture_index",
+    "humidity_pct",
+    "land_surface_temperature_c",
 }
+
+# v3-only fields with no live source anywhere in this codebase - always
+# user-supplied, like excavators_available etc. Listed here for reference/
+# tests only (see module docstring); v3's actual required-column order
+# comes from models/model2_features.json via model2_service.py.
+MODEL2_V3_MANUAL_ONLY_FEATURES: list[str] = [
+    "equipment_downtime_hours",
+    "dumper_cycle_time_minutes",
+]
 
 # Site coordinates used to query live weather/soil data per pit_id - and to
 # build the frontend-shaped shortfall report (app/services/shortfall_report.py).

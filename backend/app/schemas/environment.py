@@ -19,6 +19,7 @@ class EnvironmentResponse(BaseModel):
     cumulative_rainfall_72h: float
     soil_moisture_index: float
     temperature_celsius: float
+    humidity_pct: float
     surface_water_risk: str
     observed_at: str = Field(
         ...,

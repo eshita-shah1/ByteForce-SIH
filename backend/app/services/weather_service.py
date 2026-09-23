@@ -1,16 +1,18 @@
 """Live weather/soil data client (Open-Meteo - free, no API key required).
 
-Fetches rainfall, cumulative 72h rainfall, and soil moisture - the three
-variables Module 2 actually needs
-(app.ml.model2.feature_schema.LIVE_SOURCEABLE_FEATURES) - plus air
-temperature, which Module 2 does NOT use (v1 fetched near-surface
-temperature as a land_surface_temperature_c proxy; the v2 model has no
-such feature) but the Shortfall screen's "Live Environmental Context" bar
-(app/api/environment.py) displays for the user. Temperature is returned
-in this function's dict under a key outside LIVE_SOURCEABLE_FEATURES, so
-external_data_service.resolve_environment_features() - which only reads
-the 3 keys it knows about - silently ignores it; Model 2's feature vector
-is unaffected.
+Fetches rainfall, cumulative 72h rainfall, soil moisture, air temperature,
+and (as of 2026-09-22) relative humidity - the five variables in
+app.ml.model2.feature_schema.LIVE_SOURCEABLE_FEATURES.
+
+History: v1/v2 Model 2 fetched near-surface temperature only as a display
+value for the Shortfall screen's "Live Environmental Context" bar
+(app/api/environment.py) - the v2 model itself had no temperature or
+humidity feature, so external_data_service.resolve_environment_features()
+ignored both. The v3 model (2026-09-22 deployment package) genuinely
+requires land_surface_temperature_c and humidity_pct as inputs, so both
+are now real, live-sourceable prediction inputs, not just display values;
+relative_humidity_2m was added to the Open-Meteo request for this.
+temperature_2m already existed and is unchanged.
 """
 from __future__ import annotations
 
@@ -52,15 +54,22 @@ def _attach_utc_offset(naive_local_time: str, utc_offset_seconds: float | int | 
 
 async def fetch_live_environment(lat: float, lon: float, settings: Settings) -> dict:
     """Returns rainfall_intensity_mm, cumulative_rainfall_72h,
-    soil_moisture_index, temperature_celsius, and observed_at (an
-    ISO-8601 timestamp WITH an explicit UTC offset, e.g.
-    "2026-09-11T23:00:00+05:30" - the pit-local time of the latest hourly
-    value used, unambiguous regardless of the caller's own timezone) for
-    the given point."""
+    soil_moisture_index, temperature_celsius, land_surface_temperature_c,
+    humidity_pct, and observed_at (an ISO-8601 timestamp WITH an explicit
+    UTC offset, e.g. "2026-09-11T23:00:00+05:30" - the pit-local time of
+    the latest hourly value used, unambiguous regardless of the caller's
+    own timezone) for the given point.
+
+    temperature_celsius and land_surface_temperature_c are the same
+    reading under two keys: the former is the pre-existing display key
+    used by app/api/environment.py's EnvironmentResponse; the latter is
+    the key name Model 2 v3's feature vector expects
+    (app.ml.model2.feature_schema.LIVE_SOURCEABLE_FEATURES /
+    external_data_service.py)."""
     params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": "precipitation,soil_moisture_0_to_7cm,temperature_2m",
+        "hourly": "precipitation,soil_moisture_0_to_7cm,temperature_2m,relative_humidity_2m",
         "past_days": 3,
         "forecast_days": 1,
         "timezone": "auto",
@@ -91,8 +100,9 @@ async def fetch_live_environment(lat: float, lon: float, settings: Settings) -> 
         precipitation = hourly["precipitation"]
         soil_moisture = hourly["soil_moisture_0_to_7cm"]
         temperature = hourly["temperature_2m"]
+        humidity = hourly["relative_humidity_2m"]
         times = hourly["time"]
-        if not precipitation or not soil_moisture or not temperature or not times:
+        if not precipitation or not soil_moisture or not temperature or not humidity or not times:
             raise KeyError("empty hourly series")
 
         # "current" rainfall intensity = most recent hourly value; 72h
@@ -101,6 +111,7 @@ async def fetch_live_environment(lat: float, lon: float, settings: Settings) -> 
         cumulative_rainfall_72h = float(sum(v for v in precipitation[-72:] if v is not None))
         soil_moisture_index = float(soil_moisture[-1])
         temperature_celsius = float(temperature[-1])
+        humidity_pct = float(humidity[-1])
 
         observed_at = _attach_utc_offset(str(times[-1]), payload.get("utc_offset_seconds"))
     except (KeyError, IndexError, TypeError) as exc:
@@ -114,6 +125,8 @@ async def fetch_live_environment(lat: float, lon: float, settings: Settings) -> 
         "cumulative_rainfall_72h": cumulative_rainfall_72h,
         "soil_moisture_index": soil_moisture_index,
         "temperature_celsius": temperature_celsius,
+        "land_surface_temperature_c": temperature_celsius,
+        "humidity_pct": humidity_pct,
         "observed_at": observed_at,
     }
 
