@@ -22,6 +22,13 @@ class ProspectivityLocation(BaseModel):
     longitude: float
 
 
+class ProspectivityContributor(BaseModel):
+    feature: str
+    label: str
+    input_value: float | int | str | bool | None
+    shap_value: float
+
+
 class ProspectivityResponse(BaseModel):
     success: bool = True
     location: ProspectivityLocation
@@ -32,6 +39,20 @@ class ProspectivityResponse(BaseModel):
     matched_cell_id: str | None = None
     match_distance_m: float | None = None
     features_used: list[str]
+    # Real SHAP TreeExplainer output for this exact prediction (see
+    # app/services/model1_service.py) - top contributors by shap_value,
+    # positive_contributors pushing toward manganese_present and
+    # negative_contributors pushing away from it. Both empty (not None) if
+    # the explainer produced no contributors; None only if explanation
+    # generation itself failed - never fabricated. Additive, existing
+    # consumers of this response are unaffected.
+    positive_contributors: list[ProspectivityContributor] | None = None
+    negative_contributors: list[ProspectivityContributor] | None = None
+    # No validated Model 1 exploration/field-action rules exist anywhere in
+    # this repository (see app/services/model1_service.py's docstring) -
+    # intentionally always empty rather than inventing domain thresholds.
+    # Additive.
+    recommended_exploration_measures: list[str] = []
 
 
 class StudyAreaResponse(BaseModel):

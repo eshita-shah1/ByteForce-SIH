@@ -13,6 +13,8 @@ import {
   RotateCcw,
   Compass,
   MapPin,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 import { StudyAreaMap } from '../components/prospectivity/StudyAreaMap';
 import { BHARVELI_CENTER, isInsideStudyArea, formatCoordinate, geoJsonToLeafletPositions } from '../utils/geoUtils';
@@ -36,7 +38,12 @@ const PT = {
     confidence: 'confidence',
     submittedParams: 'Submitted Exploration Parameters',
     contributingFactors: 'Key Contributing Geological Factors',
+    contributingFactorsDesc: 'Real SHAP feature contributions from Model 1 for this exact prediction - not a general explanation, specific to the matched location.',
+    pushesToward: 'pushes toward manganese present',
+    pushesAway: 'pushes away from manganese present',
+    explanationUnavailable: 'Model explanation is unavailable for this prediction (the explainer did not produce a result on the server).',
     recommendations: 'Recommended Exploration Program',
+    noExplorationMeasures: 'No specific exploration measures were generated from the available validated rules.',
     guidanceTitle: 'Target Sampling Guidance',
     guidanceDesc: 'Click anywhere inside the Bharveli & Balaghat concession polygon on the map or adjust coordinates with the steppers, then run the model to generate a comprehensive prospectivity report.',
     formation: 'Formation',
@@ -81,7 +88,12 @@ const PT = {
     confidence: 'विश्वसनीयता',
     submittedParams: 'प्रस्तुत अन्वेषण पैरामीटर',
     contributingFactors: 'प्रमुख योगदानकर्ता भूवैज्ञानिक कारक',
+    contributingFactorsDesc: 'इस सटीक पूर्वानुमान के लिए मॉडल 1 से वास्तविक SHAP फीचर योगदान - एक सामान्य व्याख्या नहीं, बल्कि मिलान किए गए स्थान के लिए विशिष्ट।',
+    pushesToward: 'मैंगनीज उपस्थिति की ओर धकेलता है',
+    pushesAway: 'मैंगनीज उपस्थिति से दूर धकेलता है',
+    explanationUnavailable: 'इस पूर्वानुमान के लिए मॉडल व्याख्या अनुपलब्ध है (एक्सप्लेनर ने सर्वर पर कोई परिणाम नहीं दिया)।',
     recommendations: 'अनुशंसित अन्वेषण कार्यक्रम',
+    noExplorationMeasures: 'उपलब्ध सत्यापित नियमों से कोई विशिष्ट अन्वेषण उपाय उत्पन्न नहीं हुए।',
     guidanceTitle: 'लक्ष्य नमूना मार्गदर्शन',
     guidanceDesc: 'मानचित्र पर भारवेली और बालाघाट रियायत बहुभुज के अंदर कहीं भी क्लिक करें या स्टेपर के साथ निर्देशांक समायोजित करें, फिर व्यापक संभावना रिपोर्ट उत्पन्न करने के लिए मॉडल चलाएं।',
     formation: 'फॉर्मेशन',
@@ -537,6 +549,86 @@ export const ProspectivityView: React.FC<ProspectivityViewProps> = ({ onSubBread
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* 4. Key Contributing Geological Factors - real SHAP output for this
+              exact prediction (app/services/model1_service.py). Distinct from a
+              general "why this model works" explanation: specific to the
+              matched location's actual feature values. */}
+          <div className="bg-white p-6 print:p-3.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle space-y-4 print:space-y-1.5 break-inside-avoid print:mt-2">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 tracking-tight">
+                {pt.contributingFactors}
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-1">
+                {pt.contributingFactorsDesc}
+              </p>
+            </div>
+            {(result.positive_contributors && result.positive_contributors.length > 0) ||
+            (result.negative_contributors && result.negative_contributors.length > 0) ? (
+              <div className="divide-y divide-slate-100 print:divide-slate-200">
+                {[...(result.positive_contributors ?? []), ...(result.negative_contributors ?? [])].map(
+                  (factor, idx) => {
+                    const increases = factor.shap_value > 0;
+                    return (
+                      <div key={idx} className="py-3 print:py-1.5 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                              increases ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                            }`}
+                          >
+                            {increases ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-800">
+                              {factor.label.replace(/_/g, ' ')}
+                            </h4>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              {increases ? pt.pushesToward : pt.pushesAway} · value: {String(factor.input_value)}
+                            </p>
+                          </div>
+                        </div>
+                        <span
+                          className={`text-xs font-bold font-mono shrink-0 ${
+                            increases ? 'text-emerald-600' : 'text-rose-600'
+                          }`}
+                        >
+                          {increases ? '+' : ''}
+                          {factor.shap_value.toFixed(3)}
+                        </span>
+                      </div>
+                    );
+                  }
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">{pt.explanationUnavailable}</p>
+            )}
+          </div>
+
+          {/* 5. Recommended Exploration Program - intentionally empty unless
+              validated exploration rules exist (none do yet - see
+              model1_service.py's docstring). Never implies SHAP itself is a
+              field recommendation. */}
+          <div className="bg-white p-6 print:p-3.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle space-y-3 print:space-y-1.5 break-inside-avoid print:mt-2">
+            <h3 className="text-xs font-bold text-slate-900 tracking-tight">
+              {pt.recommendations}
+            </h3>
+            {result.recommended_exploration_measures.length > 0 ? (
+              <div className="space-y-3 print:space-y-1.5">
+                {result.recommended_exploration_measures.map((measure, idx) => (
+                  <div key={idx} className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full bg-brand-mint-bg text-brand-forest flex items-center justify-center text-xs font-bold shrink-0">
+                      {idx + 1}
+                    </div>
+                    <p className="text-xs text-slate-700 leading-relaxed pt-0.5">{measure}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">{pt.noExplorationMeasures}</p>
+            )}
           </div>
         </div>
       ) : (

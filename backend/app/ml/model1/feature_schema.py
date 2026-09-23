@@ -98,3 +98,24 @@ def feature_group(column: str) -> str:
     if column.startswith("terrain_"):
         return "terrain"
     return "other"
+
+
+# Human-readable display labels for the SHAP explainability feature (2026),
+# for feature columns whose raw name is not self-explanatory. Deliberately
+# EMPTY as shipped: this repo was searched for an existing label/display-name
+# source (feature_service.py's SYNONYMS dict - upload-column matching
+# keywords, not display labels, and often lossier than the raw name, e.g.
+# soil_clay_5_15cm's only synonym is "clay", which drops the depth range;
+# FEATURE_GROUPS above - categorization, not labels; and the source project's
+# ml_feature_manifest.csv - inclusion/exclusion audit reasons, no display
+# names) and none qualify. Rather than invent scientific-sounding labels,
+# every feature falls back to its own raw name via get_feature_label() below
+# until real, sourced labels are supplied. Add entries here (not by
+# hardcoding fallbacks elsewhere) if a validated label source appears later.
+FEATURE_LABELS: dict[str, str] = {}
+
+
+def get_feature_label(column: str) -> str:
+    """Human-readable label for a raw feature column, falling back to the
+    column's own name if no entry exists in FEATURE_LABELS."""
+    return FEATURE_LABELS.get(column, column)

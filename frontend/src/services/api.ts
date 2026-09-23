@@ -6,7 +6,16 @@ export type LoginResult =
   | { ok: true; user: User }
   | { ok: false; reason: 'invalid_credentials' | 'server_error'; message: string };
 
-/** Mirrors backend app/schemas/prospectivity.py's ProspectivityResponse exactly. */
+/** Mirrors backend app/schemas/prospectivity.py's ProspectivityContributor exactly. */
+export interface ProspectivityContributor {
+  feature: string;
+  label: string;
+  input_value: number | string | boolean | null;
+  shap_value: number;
+}
+
+/** Mirrors backend app/schemas/prospectivity.py's ProspectivityResponse exactly
+ * (2026: additive Model 1 explainability fields - see model1_service.py). */
 export interface ProspectivityApiResponse {
   success: boolean;
   location: { latitude: number; longitude: number };
@@ -17,6 +26,12 @@ export interface ProspectivityApiResponse {
   matched_cell_id: string | null;
   match_distance_m: number | null;
   features_used: string[];
+  // Real SHAP output for this exact prediction - null only if explanation
+  // generation failed server-side; never fabricated.
+  positive_contributors: ProspectivityContributor[] | null;
+  negative_contributors: ProspectivityContributor[] | null;
+  // No validated Model 1 exploration rules exist yet - always [] until some do.
+  recommended_exploration_measures: string[];
 }
 
 export type ProspectivityApiResult =

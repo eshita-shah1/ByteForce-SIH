@@ -34,6 +34,7 @@ def predict_from_existing_study_area(
     feature_dict = {c: cell[c] for c in feature_columns}
 
     result = model1_service.predict(feature_dict)
+    explanation = model1_service.explain(feature_dict)
 
     return ProspectivityResponse(
         location=ProspectivityLocation(latitude=latitude, longitude=longitude),
@@ -44,4 +45,6 @@ def predict_from_existing_study_area(
         matched_cell_id=cell["master_cell_id"],
         match_distance_m=round(float(cell["distance_m"]), 2),
         features_used=result["features_used"],
+        positive_contributors=explanation["positive_contributors"] if explanation else None,
+        negative_contributors=explanation["negative_contributors"] if explanation else None,
     )

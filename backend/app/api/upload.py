@@ -79,6 +79,7 @@ def predict_from_upload(
         )
 
     result = model1_service.predict(resolved)
+    explanation = model1_service.explain(resolved)
 
     log_service.record_run(
         db,
@@ -95,4 +96,6 @@ def predict_from_upload(
         decision_threshold=result["decision_threshold"],
         data_source="uploaded_dataset",
         features_used=result["features_used"],
+        positive_contributors=explanation["positive_contributors"] if explanation else None,
+        negative_contributors=explanation["negative_contributors"] if explanation else None,
     )
