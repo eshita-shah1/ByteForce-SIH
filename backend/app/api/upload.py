@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
@@ -14,8 +15,10 @@ from app.schemas.upload import DatasetValidationResult, UploadCreateResponse, Up
 from app.services import log_service, upload_service
 from app.services.feature_service import SourceIndex
 from app.services.model1_service import model1_service
+from app.services.prospectivity_report import build_prospectivity_report
 
 router = APIRouter(tags=["upload"])
+logger = logging.getLogger("app.upload")
 
 
 @router.post("/api/upload", response_model=UploadCreateResponse)
@@ -89,7 +92,7 @@ def predict_from_upload(
         metric_highlight=f"{result['probability']:.0%} · {result['prediction'].replace('_', ' ')}",
     )
 
-    return ProspectivityResponse(
+    response = ProspectivityResponse(
         location=ProspectivityLocation(latitude=request.latitude, longitude=request.longitude),
         prediction=result["prediction"],
         probability=result["probability"],
@@ -99,3 +102,10 @@ def predict_from_upload(
         positive_contributors=explanation["positive_contributors"] if explanation else None,
         negative_contributors=explanation["negative_contributors"] if explanation else None,
     )
+
+    try:
+        response.report = build_prospectivity_report(response)
+    except Exception:
+        logger.exception("Failed to build Model 1 prospectivity report; prediction is unaffected.")
+
+    return response

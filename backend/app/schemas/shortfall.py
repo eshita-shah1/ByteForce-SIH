@@ -11,6 +11,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, field_validator
 
 from app.ml.model2.feature_schema import CATEGORICAL_FEATURES
+from app.schemas.shortfall_assessment_report import ShortfallAssessmentReport
 from app.schemas.shortfall_report import ShortfallReportData
 
 
@@ -111,3 +112,8 @@ class ShortfallResponse(BaseModel):
     # Frontend-shaped report (see app/services/shortfall_report.py) - additive,
     # existing consumers of this response are unaffected.
     report: ShortfallReportData | None = None
+    # Detailed "Manganese Production Shortfall Assessment" report (2026) -
+    # see app/services/shortfall_assessment_report.py. Built from this same
+    # response's prediction/SHAP data; None only if the explainer produced
+    # no explanation for this request. Additive.
+    assessment_report: ShortfallAssessmentReport | None = None

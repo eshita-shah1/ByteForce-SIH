@@ -15,7 +15,7 @@ import {
   TrendingUp,
   TrendingDown
 } from 'lucide-react';
-import { api, EnvironmentApiResponse } from '../services/api';
+import { api, EnvironmentApiResponse, ShortfallAssessmentReport } from '../services/api';
 import { PitId, ShiftType, ShortfallOperationalInputs, ShortfallReportData, ShortfallSiteInfo } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { AnimatedNumber } from '../components/core/AnimatedNumber';
@@ -101,6 +101,7 @@ const ST = {
     modelExplanationDesc: 'Real SHAP feature contributions from Model 2 (v3) for this exact prediction - not a general explanation, specific to the inputs submitted above.',
     increasesPrediction: 'increases predicted output',
     decreasesPrediction: 'decreases predicted output',
+    valueLabel: 'Value',
     modelExplanationUnavailable: 'Model explanation is unavailable for this run (the explainer did not load on the server).',
   },
   hi: {
@@ -180,6 +181,7 @@ const ST = {
     modelExplanationDesc: 'इस सटीक पूर्वानुमान के लिए मॉडल 2 (v3) से वास्तविक SHAP फीचर योगदान - एक सामान्य व्याख्या नहीं, बल्कि ऊपर सबमिट किए गए इनपुट के लिए विशिष्ट।',
     increasesPrediction: 'अनुमानित उत्पादन बढ़ाता है',
     decreasesPrediction: 'अनुमानित उत्पादन घटाता है',
+    valueLabel: 'मान',
     modelExplanationUnavailable: 'इस रन के लिए मॉडल व्याख्या अनुपलब्ध है (एक्सप्लेनर सर्वर पर लोड नहीं हुआ)।',
   },
 } as const;
@@ -330,6 +332,10 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
   // genuinely collected, a failed call means something real went wrong -
   // that should surface as an error, not a silently fabricated forecast.
   const [report, setReport] = useState<ShortfallReportData | null>(initialReport ?? null);
+  // Detailed "Manganese Production Shortfall Assessment" report - separate
+  // top-level API field, not nested inside ShortfallReportData/`report`
+  // above. Starts null; only ever set from a real backend response.
+  const [assessmentReport, setAssessmentReport] = useState<ShortfallAssessmentReport | null>(null);
   const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
   const [runError, setRunError] = useState<string | null>(null);
 
@@ -365,6 +371,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
     setIsEvaluating(false);
     if (result.ok && result.data.report) {
       setReport(result.data.report);
+      setAssessmentReport(result.data.assessment_report);
       setStep('report');
       if (onSubBreadcrumbChange) onSubBreadcrumbChange('Model Prediction Report');
     } else {
@@ -1037,19 +1044,49 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
             </div>
           </div>
 
-          {/* 4.5. Model Explanation - real SHAP output for this exact
-              prediction, distinct from the rule-based Contributing Factors
-              card above. Never claims certainty - see disclaimer below. */}
+          {/* 4.5. Why did the model produce this result? - real SHAP output
+              for this exact prediction (top 5 by |contribution|), from the
+              detailed assessment_report (backend/app/services/
+              shortfall_assessment_report.py). Falls back to the older raw
+              SHAP card if the detailed report wasn't available for some
+              reason, and to an honest "unavailable" message if neither is. */}
           <div className="bg-white p-6 print:p-3.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle space-y-4 print:space-y-1.5 break-inside-avoid print:mt-2">
             <div>
               <h3 className="text-xs font-bold text-slate-900 tracking-tight">
-                {st.modelExplanationTitle}
+                {assessmentReport ? assessmentReport.why_model_produced_result.title : st.modelExplanationTitle}
               </h3>
               <p className="text-[11px] text-slate-500 mt-1">
                 {st.modelExplanationDesc}
               </p>
             </div>
-            {report.modelExplanation && report.modelExplanation.length > 0 ? (
+            {assessmentReport && assessmentReport.why_model_produced_result.factors.length > 0 ? (
+              <div className="divide-y divide-slate-100 print:divide-slate-200">
+                {assessmentReport.why_model_produced_result.factors.map((factor, idx) => {
+                  const positive = factor.direction === 'positive';
+                  return (
+                    <div key={idx} className="py-3 print:py-1.5 flex items-start gap-3">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${positive ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                        {positive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <h4 className="text-xs font-bold text-slate-800">
+                            {factor.label}
+                          </h4>
+                          <span className={`text-xs font-bold font-mono shrink-0 ${positive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {positive ? '+' : ''}{factor.shap_contribution.toFixed(2)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{st.valueLabel}: {factor.value}</p>
+                        <p className="text-[11px] text-slate-500 mt-1 leading-relaxed max-w-xl">
+                          {factor.explanation}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : report.modelExplanation && report.modelExplanation.length > 0 ? (
               <div className="divide-y divide-slate-100 print:divide-slate-200">
                 {report.modelExplanation.map((factor, idx) => {
                   const increases = factor.direction === 'increases_prediction';
@@ -1064,7 +1101,7 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
                             {factor.feature.replace(/_/g, ' ')}
                           </h4>
                           <p className="text-[11px] text-slate-500 mt-0.5">
-                            {increases ? st.increasesPrediction : st.decreasesPrediction} · value: {factor.value}
+                            {increases ? st.increasesPrediction : st.decreasesPrediction} · {st.valueLabel}: {factor.value}
                           </p>
                         </div>
                       </div>
@@ -1080,33 +1117,56 @@ export const ShortfallView: React.FC<ShortfallViewProps> = ({
             )}
           </div>
 
-          {/* 5. Recommended Corrective Measures */}
+          {/* 5. Recommended Corrective Measures - generated only for
+              negative + operationally-actionable SHAP contributors (see
+              shortfall_assessment_report.py's ACTIONABLE_FEATURES). Falls
+              back to the older rule-based list, then an honest empty state. */}
           <div className="bg-white p-6 print:p-3.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-subtle space-y-4 print:space-y-1.5 break-inside-avoid print:mt-2">
             <h3 className="text-xs font-bold text-slate-900 tracking-tight">
-              {st.correctiveMeasures}
+              {assessmentReport ? assessmentReport.recommended_corrective_measures.title : st.correctiveMeasures}
             </h3>
-            <div className="space-y-3 print:space-y-1.5">
-              {report.correctiveMeasures.map((measure, idx) => {
-                const colonIdx = measure.indexOf(':');
-                return (
-                  <div key={idx} className="flex items-start gap-3">
-                    <div className="w-5 h-5 rounded-full bg-brand-mint-bg text-brand-forest flex items-center justify-center text-xs font-bold shrink-0">
-                      {idx + 1}
+            {assessmentReport ? (
+              assessmentReport.recommended_corrective_measures.measures.length > 0 ? (
+                <div className="space-y-3 print:space-y-1.5">
+                  {assessmentReport.recommended_corrective_measures.measures.map((m, idx) => (
+                    <div key={idx} className="flex items-start gap-3">
+                      <div className="w-5 h-5 rounded-full bg-brand-mint-bg text-brand-forest flex items-center justify-center text-xs font-bold shrink-0">
+                        {idx + 1}
+                      </div>
+                      <p className="text-xs text-slate-700 leading-relaxed pt-0.5">
+                        <strong className="text-slate-900">{m.label}: </strong>
+                        {m.measure}
+                      </p>
                     </div>
-                    <p className="text-xs text-slate-700 leading-relaxed pt-0.5">
-                      {colonIdx !== -1 ? (
-                        <>
-                          <strong className="text-slate-900">{measure.slice(0, colonIdx + 1)}</strong>
-                          {measure.slice(colonIdx + 1)}
-                        </>
-                      ) : (
-                        <strong className="text-slate-900">{measure}</strong>
-                      )}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">{assessmentReport.recommended_corrective_measures.note}</p>
+              )
+            ) : (
+              <div className="space-y-3 print:space-y-1.5">
+                {report.correctiveMeasures.map((measure, idx) => {
+                  const colonIdx = measure.indexOf(':');
+                  return (
+                    <div key={idx} className="flex items-start gap-3">
+                      <div className="w-5 h-5 rounded-full bg-brand-mint-bg text-brand-forest flex items-center justify-center text-xs font-bold shrink-0">
+                        {idx + 1}
+                      </div>
+                      <p className="text-xs text-slate-700 leading-relaxed pt-0.5">
+                        {colonIdx !== -1 ? (
+                          <>
+                            <strong className="text-slate-900">{measure.slice(0, colonIdx + 1)}</strong>
+                            {measure.slice(colonIdx + 1)}
+                          </>
+                        ) : (
+                          <strong className="text-slate-900">{measure}</strong>
+                        )}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

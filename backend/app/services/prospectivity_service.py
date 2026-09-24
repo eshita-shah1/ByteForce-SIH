@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -8,6 +10,9 @@ from app.ml.model1.feature_schema import get_feature_columns
 from app.schemas.prospectivity import ProspectivityLocation, ProspectivityResponse
 from app.services import gis_service
 from app.services.model1_service import model1_service
+from app.services.prospectivity_report import build_prospectivity_report
+
+logger = logging.getLogger("app.prospectivity")
 
 
 def predict_from_existing_study_area(
@@ -36,7 +41,7 @@ def predict_from_existing_study_area(
     result = model1_service.predict(feature_dict)
     explanation = model1_service.explain(feature_dict)
 
-    return ProspectivityResponse(
+    response = ProspectivityResponse(
         location=ProspectivityLocation(latitude=latitude, longitude=longitude),
         prediction=result["prediction"],
         probability=result["probability"],
@@ -48,3 +53,10 @@ def predict_from_existing_study_area(
         positive_contributors=explanation["positive_contributors"] if explanation else None,
         negative_contributors=explanation["negative_contributors"] if explanation else None,
     )
+
+    try:
+        response.report = build_prospectivity_report(response)
+    except Exception:
+        logger.exception("Failed to build Model 1 prospectivity report; prediction is unaffected.")
+
+    return response

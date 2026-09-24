@@ -8,6 +8,7 @@ from app.schemas.shortfall import ShapContribution, ShortfallRequest, ShortfallR
 from app.services.external_data_service import resolve_environment_features
 from app.services.model2_service import model2_service
 from app.services.recommendation_service import build_recommendations, calculate_risk
+from app.services.shortfall_assessment_report import build_shortfall_assessment_report
 
 logger = logging.getLogger("app.shortfall")
 
@@ -91,13 +92,23 @@ async def predict_shortfall(request: ShortfallRequest, settings: Settings) -> Sh
             feature_sources[field] = "user"
 
     # Real SHAP output for this exact request - never fabricated; None only
-    # if the explainer failed to load (see model2_service.py).
-    shap_contributions = model2_service.explain(request_dict)
+    # if the explainer failed to load (see model2_service.py). Computed ONCE
+    # for all 15 features (not just the top 5) so the detailed assessment
+    # report's corrective-measure scan (which must consider every actionable
+    # feature, not only whichever ones happen to be in the top 5 by
+    # magnitude) doesn't require a second SHAP computation. explain() sorts
+    # by |shap_value| before truncating, so full_shap_contributions[:5] is
+    # byte-for-byte identical to calling explain(request_dict) with its
+    # default top_n=5 directly - the existing shap_explanation field's
+    # values/order are unchanged by this.
+    full_shap_contributions = model2_service.explain(request_dict, top_n=len(model2_service.feature_columns))
     shap_explanation = (
-        [ShapContribution(**c) for c in shap_contributions] if shap_contributions is not None else None
+        [ShapContribution(**c) for c in full_shap_contributions[:5]]
+        if full_shap_contributions is not None
+        else None
     )
 
-    return ShortfallResponse(
+    response = ShortfallResponse(
         pit_id=request.pit_id,
         shift_type=request.shift_type,
         target_production_tonnes=round(target, 2),
@@ -110,3 +121,10 @@ async def predict_shortfall(request: ShortfallRequest, settings: Settings) -> Sh
         feature_sources=feature_sources,
         shap_explanation=shap_explanation,
     )
+
+    try:
+        response.assessment_report = build_shortfall_assessment_report(response, full_shap_contributions)
+    except Exception:
+        logger.exception("Failed to build Model 2 shortfall assessment report; prediction is unaffected.")
+
+    return response

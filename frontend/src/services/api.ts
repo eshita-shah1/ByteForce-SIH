@@ -14,6 +14,43 @@ export interface ProspectivityContributor {
   shap_value: number;
 }
 
+/** Mirrors backend app/schemas/prospectivity_report.py's ProspectivityReportFactor exactly. */
+export interface ProspectivityReportFactor {
+  feature: string;
+  label: string;
+  inputValue: number | string | boolean | null;
+  shapValue: number;
+  direction: 'supporting' | 'limiting';
+  explanation: string;
+}
+
+/** Mirrors backend app/schemas/prospectivity_report.py's ProspectivityAssessmentSummary exactly. */
+export interface ProspectivityAssessmentSummary {
+  location: string;
+  prospectivity: string;
+  predictedClass: string;
+  supportingFactors: string;
+  limitingFactors: string;
+  overallAction: string;
+}
+
+/** Mirrors backend app/schemas/prospectivity_report.py's ProspectivityReportData exactly
+ * (2026: redesigned technical-assessment report, built from the real prediction/SHAP
+ * data above - see app/services/prospectivity_report.py). */
+export interface ProspectivityReportData {
+  generatedAt: string;
+  targetMineral: string;
+  prospectivityPercentage: number;
+  predictedClassLabel: string;
+  narrative: string;
+  whyExplanation: string;
+  supportingFactors: ProspectivityReportFactor[];
+  limitingFactors: ProspectivityReportFactor[];
+  explorationPlanIntro: string;
+  explorationPlan: string[];
+  assessmentSummary: ProspectivityAssessmentSummary;
+}
+
 /** Mirrors backend app/schemas/prospectivity.py's ProspectivityResponse exactly
  * (2026: additive Model 1 explainability fields - see model1_service.py). */
 export interface ProspectivityApiResponse {
@@ -27,11 +64,15 @@ export interface ProspectivityApiResponse {
   match_distance_m: number | null;
   features_used: string[];
   // Real SHAP output for this exact prediction - null only if explanation
-  // generation failed server-side; never fabricated.
+  // generation failed server-side; never fabricated. Full/raw lists -
+  // report.supportingFactors/limitingFactors below are the curated,
+  // report-presentation subset of these same two lists.
   positive_contributors: ProspectivityContributor[] | null;
   negative_contributors: ProspectivityContributor[] | null;
   // No validated Model 1 exploration rules exist yet - always [] until some do.
   recommended_exploration_measures: string[];
+  // Redesigned report presentation - null only if report-building itself failed.
+  report: ProspectivityReportData | null;
 }
 
 export type ProspectivityApiResult =
@@ -96,6 +137,46 @@ export type UploadCreateResult =
   | { ok: true; data: UploadCreateApiResponse }
   | { ok: false; message: string };
 
+/** Mirrors backend app/schemas/shortfall_assessment_report.py exactly (snake_case,
+ * no camelCase aliasing - unlike ShortfallReportData below, this schema was given
+ * an exact key spec to match verbatim). */
+export interface ShortfallWhyFactor {
+  feature: string;
+  label: string;
+  value: number;
+  shap_contribution: number;
+  direction: 'positive' | 'negative';
+  explanation: string;
+}
+
+export interface ShortfallCorrectiveMeasureItem {
+  feature: string;
+  label: string;
+  value: number;
+  shap_contribution: number;
+  measure: string;
+}
+
+export interface ShortfallAssessmentReport {
+  report_type: string;
+  production_summary: {
+    target_production_tonnes: number;
+    predicted_production_tonnes: number;
+    shortfall_tonnes: number;
+    shortfall_percentage: number;
+    risk_level: string;
+  };
+  why_model_produced_result: {
+    title: string;
+    factors: ShortfallWhyFactor[];
+  };
+  recommended_corrective_measures: {
+    title: string;
+    measures: ShortfallCorrectiveMeasureItem[];
+    note: string | null;
+  };
+}
+
 /** Mirrors backend app/schemas/shortfall.py's ShortfallResponse exactly (v3 model, 2026-09-22). */
 export interface ShortfallApiResponse {
   success: boolean;
@@ -117,6 +198,10 @@ export interface ShortfallApiResponse {
     direction: 'increases_prediction' | 'decreases_prediction';
   }> | null;
   report: ShortfallReportData | null;
+  // Detailed "Manganese Production Shortfall Assessment" report - additive,
+  // built from this same response's prediction/SHAP data. See
+  // backend/app/services/shortfall_assessment_report.py.
+  assessment_report: ShortfallAssessmentReport | null;
 }
 
 export type ShortfallApiResult =

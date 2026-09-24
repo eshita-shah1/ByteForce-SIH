@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.schemas.prospectivity_report import ProspectivityReportData
+
 
 class ProspectivityRequest(BaseModel):
     latitude: float = Field(..., ge=-90, le=90)
@@ -53,6 +55,12 @@ class ProspectivityResponse(BaseModel):
     # intentionally always empty rather than inventing domain thresholds.
     # Additive.
     recommended_exploration_measures: list[str] = []
+    # Redesigned technical-assessment report presentation (2026) - built
+    # from the fields above only, never a second/duplicate prediction. See
+    # app/services/prospectivity_report.py. None only if report-building
+    # itself fails; additive, existing consumers of this response (and the
+    # raw fields above) are entirely unaffected.
+    report: ProspectivityReportData | None = None
 
 
 class StudyAreaResponse(BaseModel):
