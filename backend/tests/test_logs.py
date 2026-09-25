@@ -51,6 +51,60 @@ def test_logs_endpoint_returns_array_shaped_for_frontend():
         db.close()
 
 
+def test_logs_endpoint_survives_a_report_ref_that_no_longer_matches_the_schema():
+    """Regression test: a log row written by an older code version can have
+    report_ref_json that no longer validates against the current
+    ShortfallReportData shape (e.g. a required field was added since). One
+    such row must not 500 the entire /api/logs list - it should still
+    appear, just with report_ref omitted, and every other row unaffected."""
+    client, db = _client_and_db()
+    from app.db.models import ModelRunLog
+    from app.services import log_service
+
+    marker = uuid.uuid4().hex[:8]
+    try:
+        # A row with genuinely malformed/stale report_ref_json - not valid
+        # JSON at all, the simplest way to force a guaranteed validation
+        # failure regardless of the current schema's exact shape.
+        db.add(
+            ModelRunLog(
+                id=uuid.uuid4().hex,
+                model_type="Shortfall",
+                title=f"stale schema {marker}",
+                target_site="PIT_STALE",
+                status="Completed",
+                metric_highlight="10.0% shortfall · Alert",
+                report_ref_json='{"this_is_not": "a_valid_ShortfallReportData_shape"}',
+            )
+        )
+        db.commit()
+
+        # A normal, healthy row alongside it, to prove the rest of the list
+        # is unaffected by the malformed one.
+        log_service.record_run(
+            db,
+            model_type="Prospectivity",
+            title=f"healthy {marker}",
+            target_site="CELL_HEALTHY",
+            metric_highlight="90% · manganese present",
+        )
+
+        response = client.get("/api/logs")
+        assert response.status_code == 200
+        body = response.json()
+
+        stale = next(item for item in body if item["title"] == f"stale schema {marker}")
+        assert stale["reportRef"] is None
+        assert stale["targetSite"] == "PIT_STALE"  # everything else about the row is still intact
+
+        healthy = next(item for item in body if item["title"] == f"healthy {marker}")
+        assert healthy["targetSite"] == "CELL_HEALTHY"
+    finally:
+        db.query(ModelRunLog).filter(ModelRunLog.title.contains(marker)).delete()
+        db.commit()
+        db.close()
+
+
 def test_logs_are_returned_most_recent_first():
     client, db = _client_and_db()
     from app.services import log_service
