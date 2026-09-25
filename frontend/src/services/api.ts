@@ -276,8 +276,29 @@ export const api = {
       return { ok: false, reason: 'server_error', message: `Server error (${res.status}). Please try again.` };
     }
 
-    const data = await res.json();
-    return { ok: true, user: data.user as User };
+    // Read as text first (not res.json() directly): a 200 response whose
+    // body is empty/truncated/non-JSON for any reason (proxy/edge quirk,
+    // interrupted connection, etc.) must produce a diagnosable, specific
+    // error - not an uncaught exception that a caller's generic catch
+    // swallows into an unhelpful "an error occurred" with no logged cause.
+    const rawText = await res.text();
+    let data: { user: User };
+    try {
+      data = JSON.parse(rawText);
+    } catch (err) {
+      console.error('Login returned status 200 but the response body was not valid JSON.', {
+        status: res.status,
+        bodyLength: rawText.length,
+        bodyPreview: rawText.slice(0, 200),
+        parseError: err,
+      });
+      return {
+        ok: false,
+        reason: 'server_error',
+        message: `The server returned an unreadable response (${rawText.length} bytes). Please try again.`,
+      };
+    }
+    return { ok: true, user: data.user };
   },
 
   /**

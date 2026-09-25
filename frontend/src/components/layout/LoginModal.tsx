@@ -28,8 +28,13 @@ export const LoginModal: React.FC = () => {
       if (!res.success) {
         setError(res.error || 'Authentication failed');
       }
-    } catch {
-      setError('An error occurred during authentication');
+    } catch (err) {
+      // login()/api.login() are not expected to throw (they catch their own
+      // fetch/parse failures and return a structured result) - if something
+      // still reaches here, it's a genuinely unexpected error and must be
+      // logged, not silently swallowed, or it can never be diagnosed.
+      console.error('Unexpected error during login:', err);
+      setError('An error occurred during authentication. See the browser console for details.');
     } finally {
       setLoading(false);
     }
